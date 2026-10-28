@@ -291,10 +291,32 @@ ENV_FILE_LABEL = os.getenv("APP_ENV_FILE", str(PROJECT_ROOT / ".env")) or "(none
 # ── Persistence ────────────────────────────────────────────────────
 
 
-def _save() -> None:
+def _stored() -> dict[str, Any]:
+    """The override file as a dict. Missing, unreadable or not an object gives {}.
+
+    A corrupt file must not stop the app from starting, so this never raises.
+    """
+    if not _PATH.exists():
+        return {}
+    try:
+        data = json.loads(_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        log.warning("settings.load_failed", path=str(_PATH))
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save(applied: dict[str, Any]) -> None:
+    """Merge the changed keys into the file, leaving everything else alone.
+
+    This file holds ONLY what an operator actually changed in the admin backend. Writing
+    the full settings set instead would bake every value from the env file into it on the
+    first save, after which editing the env file would silently stop having any effect.
+    """
+    merged = {**_stored(), **applied}
     _PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = _PATH.with_suffix(_PATH.suffix + ".tmp")
-    tmp.write_text(json.dumps(current(), indent=2, sort_keys=True), encoding="utf-8")
+    tmp.write_text(json.dumps(merged, indent=2, sort_keys=True), encoding="utf-8")
     os.replace(tmp, _PATH)
 
 
@@ -305,12 +327,8 @@ def load_and_apply() -> None:
     longer validates is skipped rather than fatal, so a stale file cannot stop the app
     from starting.
     """
-    if not _PATH.exists():
-        return
-    try:
-        data = json.loads(_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        log.warning("settings.load_failed", path=str(_PATH))
+    data = _stored()
+    if not data:
         return
     applied = {}
     for name in SPECS:
@@ -326,16 +344,27 @@ def load_and_apply() -> None:
 
 
 def update(changes: dict) -> tuple[dict[str, Any], list[str]]:
-    """Validate, apply and persist. Returns the new values and which need a restart."""
-    applied: dict[str, Any] = {}
+    """Validate everything first, then apply and persist. All or nothing.
+
+    Coercion happens for the whole batch before a single value is written. Validating and
+    assigning in one pass would leave the earlier values of a batch applied in memory when
+    a later one is rejected, while the caller gets an error and nothing is persisted, so
+    memory and file would disagree.
+    """
+    coerced: dict[str, Any] = {}
     for name, value in changes.items():
         if name not in SPECS or value is None:
             continue
-        setattr(settings, name, _coerce(name, value))
-        applied[name] = getattr(settings, name)
+        coerced[name] = _coerce(name, value)  # raises SettingError, nothing applied yet
+
+    # Only values that actually differ reach the file, so it stays a record of what an
+    # operator deliberately changed.
+    applied = {n: v for n, v in coerced.items() if getattr(settings, n) != v}
     pending: list[str] = []
     if applied:
-        _save()
+        for name, value in applied.items():
+            setattr(settings, name, value)
+        _save(applied)
         pending = sorted(n for n in applied if SPECS[n].tier == "restart")
         log.info("settings.updated", changed=sorted(applied), restart_pending=pending)
     return current(), pending

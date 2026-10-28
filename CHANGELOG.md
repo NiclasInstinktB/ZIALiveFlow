@@ -3,6 +3,21 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.46.1
+
+Two fixes in how runtime settings are persisted.
+
+- Saving a setting wrote the complete settings set to runtime_settings.json, so the first
+  save froze every value from the env file into it. Editing the env file afterwards had no
+  effect and nothing said so. The file now records only the keys an operator actually
+  changed.
+- Updating validated and assigned in the same pass, so a batch with an invalid value at the
+  end left the earlier values applied in memory while the caller got an error and nothing
+  was written. The whole batch is validated first now, then applied, or nothing is.
+- Values that do not differ from the current one are no longer written.
+- A corrupt or non-object override file is ignored instead of being half read.
+- 11 new tests, 234 in total.
+
 ## v0.46.0
 
 First public release.

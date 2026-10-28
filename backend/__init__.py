@@ -14,4 +14,4 @@ this program. If not, see <https://www.gnu.org/licenses/>.
 """
 from __future__ import annotations
 
-__version__ = "0.46.0"
+__version__ = "0.46.1"
