@@ -1,0 +1,41 @@
+# Web framework
+fastapi==0.139.0
+uvicorn[standard]==0.51.0
+# Pinned explicitly even though FastAPI pulls it in. It was unpinned before, so a fresh
+# install resolved a newer major version than the one the project was developed against.
+starlette==1.10.0
+
+# WebSocket support for uvicorn (live stream)
+websockets==15.0.1
+
+# Settings and validation
+pydantic==2.13.4
+pydantic-settings==2.14.2
+
+# JWT session tokens (local admin accounts)
+PyJWT==2.13.0
+
+# Directory (AD/LDAP) login, optional and alongside local accounts. Imported only when
+# LDAP is configured, so without a directory the app runs without this package too (the
+# import sits inside the login function).
+ldap3==2.9.1
+
+# Fernet encryption for the directory bind password stored in the admin backend.
+cryptography==49.0.0
+
+# HTTP client for the OIDC/SSO flow (discovery plus token exchange). Imported ONLY when
+# SSO is active (the import sits in backend/api/sso_routes.py), so without SSO the app
+# runs without this package too. PyJWKClient (from PyJWT) validates the ID token.
+httpx==0.28.1
+
+# Structured logging
+structlog==26.1.0
+
+# IANA time zones for zoneinfo (the feed zone, FEED_TIMEZONE). Windows ships no time
+# zone database, and slim Linux containers often do not either. Without this package the
+# lookup falls back to UTC silently and the web log times would be shifted.
+tzdata==2026.1
+
+# Tests
+pytest==9.1.1
+pytest-asyncio==1.4.0

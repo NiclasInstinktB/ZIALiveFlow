@@ -1,0 +1,5 @@
+# Narrow sudoers rule: the app user may restart EXACTLY its own service, nothing else.
+# Install to: /etc/sudoers.d/zscaler-admin-ui   (mode 0440, root:root)
+#   sudo install -m440 deploy/zscaler-admin-ui.sudoers /etc/sudoers.d/zscaler-admin-ui
+#   sudo visudo -cf /etc/sudoers.d/zscaler-admin-ui
+zscaler-admin ALL=(root) NOPASSWD: /usr/bin/systemctl restart zscaler-admin-ui

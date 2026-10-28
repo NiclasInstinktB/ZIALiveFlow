@@ -1,0 +1,1716 @@
+/* ============================================================================
+   ZIA Live-Flow: operations console stylesheet
+
+   One design system for every screen. Rules below are written in terms of the
+   tokens in the :root block; raw colour literals and ad-hoc pixel values
+   outside that block are deliberate exceptions only.
+
+   Layout model: flat surfaces separated by 1px borders, small radii, tight
+   vertical rhythm, monospace with tabular figures for every machine value
+   (IPs, ports, byte counts, timestamps). The only saturated colours on screen
+   are the verdict colours, because they carry the meaning of a log line.
+
+   Sections
+     1  Tokens
+     2  Base elements
+     3  Text utilities
+     4  Controls: buttons, inputs, checkboxes
+     5  Surfaces: panels, notes, sections
+     6  Status language: verdicts, pills, tags, dots, levels
+     7  App shell: topbar, tabs, content, login
+     8  Live view: toolbar, filter builder, search, status line
+     9  Flow table
+    10  View settings tab
+    11  Overlays: modal, dropdown, suggestions
+    12  Admin tabs: overview, settings, config forms, accounts, audit, logs
+    13  Responsive
+   ========================================================================== */
+
+/* -- 1  Tokens ------------------------------------------------------------
+   Light palette is the base. The dark block at the end of this section
+   redefines colour tokens only, nothing else. */
+:root {
+  /* Surfaces and lines */
+  --bg: #eceff1;
+  --surface: #ffffff;
+  --surface-2: #f2f4f6;
+  --surface-3: #e4e8eb;
+  --border: #ccd3d8;
+  --border-strong: #a8b2ba;
+
+  /* Text */
+  --text: #151c21;
+  --text-muted: #566069;
+  --text-faint: #6b767f;
+
+  /* Accent: desaturated teal. Reads as instrument chrome, stays clear of the
+     verdict hues and never competes with them for attention. */
+  --accent: #0d6a70;
+  --accent-ink: #0a575c;
+  --accent-contrast: #ffffff;
+  --accent-bg: #dcebec;
+
+  /* Verdicts: allowed, degraded, blocked, neutral.
+     *-ink is text on the matching *-bg tint. */
+  --good: #1a7f37;
+  --good-ink: #0f5625;
+  --good-bg: #dcf0e2;
+  --warn: #a35c00;
+  --warn-ink: #7a4500;
+  --warn-bg: #faeada;
+  --bad: #c22b32;
+  --bad-ink: #8f1d22;
+  --bad-bg: #fae0e1;
+  --info: #5f6b74;
+  --info-ink: #454f57;
+  --info-bg: #e3e7ea;
+
+  /* Spacing scale */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 24px;
+
+  /* Radii: controls stay at 2px, panels and overlays at 4px. Nothing else. */
+  --r-control: 2px;
+  --r-panel: 4px;
+
+  /* Borders */
+  --bw: 1px;
+  --bw-marker: 3px;
+
+  /* Type */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --fs-micro: 10px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 18px;
+  --fs-stat: 23px;
+  --lh-tight: 1.25;
+  --lh-base: 1.45;
+
+  /* The single shadow in the system, for genuinely floating layers only. */
+  --shadow-pop: 0 6px 18px rgba(16, 24, 32, 0.18);
+  --scrim: rgba(22, 30, 36, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1116;
+    --surface: #151a20;
+    --surface-2: #1c232b;
+    --surface-3: #252e37;
+    --border: #2a333d;
+    --border-strong: #3e4854;
+
+    --text: #dde5eb;
+    --text-muted: #8d99a5;
+    --text-faint: #7f8b96;
+
+    --accent: #46a8b0;
+    --accent-ink: #6ec3ca;
+    --accent-contrast: #061519;
+    --accent-bg: #16313a;
+
+    --good: #3fb950;
+    --good-ink: #7ee2a0;
+    --good-bg: #13301d;
+    --warn: #d29922;
+    --warn-ink: #e9bd56;
+    --warn-bg: #352714;
+    --bad: #f0564e;
+    --bad-ink: #ff9d97;
+    --bad-bg: #3a1a1a;
+    --info: #8b98a5;
+    --info-ink: #a9b5c0;
+    --info-bg: #222a32;
+
+    --shadow-pop: 0 6px 18px rgba(0, 0, 0, 0.55);
+    --scrim: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* -- 2  Base elements ----------------------------------------------------- */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 var(--sp-4);
+  line-height: var(--lh-tight);
+  color: var(--text);
+}
+h1 {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+}
+h2 {
+  font-size: var(--fs-lg);
+  font-weight: 650;
+}
+h3 {
+  font-size: var(--fs-base);
+  font-weight: 650;
+  margin-top: var(--sp-6);
+}
+p {
+  margin: 0 0 var(--sp-4);
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+code {
+  background: var(--surface-2);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-control);
+  padding: 0 var(--sp-2);
+}
+pre {
+  background: var(--surface-2);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-control);
+  padding: var(--sp-3);
+}
+
+::selection {
+  background: var(--accent-bg);
+}
+
+/* -- 3  Text utilities ---------------------------------------------------- */
+/* Machine values: monospace with tabular figures so columns line up. */
+.mono,
+.kv-v.mono,
+.dv.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.muted {
+  color: var(--text-muted);
+}
+.small {
+  font-size: var(--fs-xs);
+}
+.nowrap {
+  white-space: nowrap;
+}
+.ellip {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.target {
+  max-width: 360px;
+}
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--sp-7) 0;
+  color: var(--text-muted);
+}
+.hint,
+.set-hint,
+.filter-hint,
+.editor-hint,
+.vs-hint,
+.feed-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: var(--lh-base);
+}
+.warn-text {
+  color: var(--warn-ink);
+}
+.empty {
+  text-align: center;
+  padding: var(--sp-7) var(--sp-5) !important;
+  color: var(--text-muted);
+}
+
+/* -- 4  Controls ----------------------------------------------------------
+   One button definition with four variants, one input definition. Every
+   control is the same height class and the same 2px radius everywhere. */
+button {
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-tight);
+  cursor: pointer;
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--sp-3) var(--sp-5);
+}
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) {
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
+  color: var(--accent-contrast);
+}
+button.ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+button.ghost:hover:not(:disabled) {
+  color: var(--text);
+}
+button.ghost.active {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-bg);
+}
+button.danger {
+  background: transparent;
+  border-color: var(--bad);
+  color: var(--bad-ink);
+}
+button.danger:hover:not(:disabled) {
+  background: var(--bad-bg);
+  border-color: var(--bad);
+  color: var(--bad-ink);
+}
+button.ghost.small,
+button.mini {
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-xs);
+}
+button.mini {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+button.chip-x {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  padding: 0 var(--sp-1);
+  margin-left: var(--sp-2);
+}
+button.chip-x:hover {
+  color: var(--bad);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: var(--fs-sm);
+  background: var(--surface);
+  color: var(--text);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-control);
+  padding: var(--sp-3) var(--sp-4);
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+input::placeholder {
+  color: var(--text-faint);
+}
+input.invalid,
+.invalid input {
+  border-color: var(--bad);
+}
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+  accent-color: var(--accent);
+}
+select {
+  padding-right: var(--sp-3);
+}
+
+label {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--sp-2);
+}
+
+.input-wrap,
+.query-wrap,
+.settings-anchor {
+  position: relative;
+}
+.input-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.field-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--bad-ink);
+}
+
+/* Inline checkbox rows share one shape across settings, columns and perms. */
+.check-row,
+.log-check,
+.perm-chip,
+.cfg-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+.log-check {
+  color: var(--text-muted);
+}
+.check-row.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* -- 5  Surfaces ----------------------------------------------------------
+   Regions are separated by a 1px border on a flat fill. No stacked shadows. */
+.panel {
+  background: var(--surface);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-panel);
+  padding: var(--sp-5);
+}
+.panel > h2:first-child,
+.panel > h3:first-child {
+  margin-top: 0;
+}
+
+.note-box,
+.error-box {
+  border: var(--bw) solid var(--border);
+  border-left: var(--bw-marker) solid var(--info);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: var(--sp-4) var(--sp-5);
+  margin: var(--sp-4) 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+}
+.error-box {
+  border-color: var(--bad);
+  border-left-color: var(--bad);
+  background: var(--bad-bg);
+  color: var(--bad-ink);
+}
+.note-box.stream-hint {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-bg);
+}
+.note-box.obf-hint {
+  border-color: var(--warn);
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+/* -- 6  Status language ---------------------------------------------------
+   The verdict hues are shared by the table badge, the quick filters, the
+   legend dots and the audit rows, so one colour always means one thing. */
+.verdict,
+.pill,
+.role-badge,
+.type-tag {
+  display: inline-block;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-control);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  line-height: 18px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.type-tag,
+.role-badge {
+  text-transform: uppercase;
+}
+
+.v-good,
+.pill-ok {
+  background: var(--good-bg);
+  color: var(--good-ink);
+}
+.v-warn,
+.pill-warn {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+.v-bad,
+.pill-bad {
+  background: var(--bad-bg);
+  color: var(--bad-ink);
+}
+.v-info,
+.pill-info {
+  background: var(--info-bg);
+  color: var(--info-ink);
+}
+
+/* Log source tag: intentionally low contrast, it is metadata not a verdict. */
+.type-tag {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  border: var(--bw) solid var(--border);
+}
+.t-web {
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.t-fw {
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+.t-dns {
+  color: var(--text-muted);
+  border-color: var(--accent);
+}
+
+.role-badge.role-admin {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+}
+.role-badge.role-viewer {
+  background: var(--info-bg);
+  color: var(--info-ink);
+}
+/* Anonymised log view (permission "logs_obf"): flagged in amber so it is
+   obvious that no clear-text names are shown. */
+.role-badge.role-obf {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+.role-select.role-admin {
+  color: var(--accent-ink);
+}
+
+.badge {
+  color: var(--accent-ink);
+  font-size: var(--fs-xs);
+}
+.ok {
+  color: var(--good-ink);
+}
+.off {
+  color: var(--text-faint);
+}
+
+.dot,
+.live-dot,
+.chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  background: var(--text-faint);
+}
+.brand .dot {
+  background: var(--accent);
+}
+.live-dot.on {
+  background: var(--good);
+}
+.live-dot.off {
+  background: var(--bad);
+}
+.chip-dot.v-good {
+  background: var(--good);
+}
+.chip-dot.v-warn {
+  background: var(--warn);
+}
+.chip-dot.v-bad {
+  background: var(--bad);
+}
+.chip-dot.v-info {
+  background: var(--info);
+}
+
+.log-level {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.log-level.warning {
+  color: var(--warn-ink);
+}
+.log-level.error,
+.log-level.critical {
+  color: var(--bad-ink);
+}
+
+/* -- 7  App shell --------------------------------------------------------- */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: 0 var(--sp-5);
+  height: 38px;
+  flex: none;
+  background: var(--surface);
+  border-bottom: var(--bw) solid var(--border);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  padding: 0 var(--sp-5);
+  height: 37px;
+  white-space: nowrap;
+}
+.tab:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.tab.active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  white-space: nowrap;
+}
+/* Language picker is deliberately a native select: keyboard accessible and it
+   renders as the platform picker on mobile. */
+.lang-select {
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-5);
+}
+
+.login-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--sp-6);
+}
+.login-card {
+  width: 320px;
+  max-width: 100%;
+  padding: var(--sp-6);
+}
+.login-card input {
+  width: 100%;
+}
+.login-card h1,
+.login-card h2 {
+  margin-bottom: 0;
+}
+
+/* -- 8  Live view --------------------------------------------------------- */
+.live {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  height: 100%;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-5);
+  flex: none;
+}
+.toolbar-actions,
+.row-actions,
+.form-actions,
+.editor-actions,
+.cei-actions,
+.chip-manage-actions,
+.chip-row-actions,
+.ov-actions,
+.log-head-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.row-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.editor-actions,
+.cei-actions {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+/* Filter builder: a group box is the bracket. What sits in one box belongs
+   together, and the operator between items is clickable. */
+.filter-builder {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.filter-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 240px;
+}
+.filter-groups,
+.chips {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.filter-group {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: center;
+  border: var(--bw) dashed var(--border-strong);
+  border-radius: var(--r-panel);
+  padding: var(--sp-2) var(--sp-3);
+}
+.filter-group.drop-target {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.filter-group.new-group {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  padding: var(--sp-4) var(--sp-5);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-2);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-control);
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-4);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.chip b {
+  color: var(--accent-ink);
+  font-weight: 650;
+  margin-right: var(--sp-2);
+}
+.chip.draggable {
+  cursor: grab;
+}
+.chip.draggable:active {
+  cursor: grabbing;
+}
+.chip-lock {
+  font-size: var(--fs-micro);
+  margin-right: var(--sp-1);
+  color: var(--text-faint);
+}
+.op-toggle {
+  border: var(--bw) solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--r-control);
+  padding: 0 var(--sp-3);
+  height: 18px;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.op-toggle.join {
+  height: 22px;
+  font-size: var(--fs-xs);
+}
+.op-toggle.op-and {
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.group-target {
+  font-size: var(--fs-xs);
+}
+
+/* Search row and verdict quick filters */
+.subbar {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.search {
+  flex: 1;
+  min-width: 220px;
+  font-family: var(--font-mono);
+}
+.query-wrap {
+  flex: 1;
+  min-width: 220px;
+}
+.query-wrap .search {
+  width: 100%;
+}
+.verdict-toggles {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.vtoggle {
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  padding: 0 var(--sp-4);
+  height: 24px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.vtoggle b {
+  margin-left: var(--sp-2);
+  font-variant-numeric: tabular-nums;
+}
+.vtoggle.v-good {
+  color: var(--good-ink);
+}
+.vtoggle.v-warn {
+  color: var(--warn-ink);
+}
+.vtoggle.v-bad {
+  color: var(--bad-ink);
+}
+.vtoggle.v-info {
+  color: var(--info-ink);
+}
+.vtoggle.active {
+  border-color: currentColor;
+}
+.vtoggle.muted-toggle {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.chip-preview {
+  flex: none;
+  cursor: default;
+}
+
+/* Feed picker (Web / FW / DNS). On = accent, off = dimmed and struck through.
+   Sizing only: border, radius and hover come from the shared button rules. */
+.feed-toggle {
+  display: flex;
+  gap: var(--sp-2);
+}
+button.feed-btn {
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+button.feed-btn.on {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+button.feed-btn:not(.on) {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.statusline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  font-size: var(--fs-xs);
+}
+/* Feed badge: dot and label sit on one baseline with the rest of the line. */
+.feed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.row-limit {
+  width: auto;
+  padding: var(--sp-1) var(--sp-3);
+}
+
+/* -- 9  Flow table --------------------------------------------------------
+   The densest region of the product. Row height is driven by one padding
+   value, every machine column renders in the mono stack. */
+.table-wrap {
+  padding: 0;
+  overflow: auto;
+  flex: 1;
+  min-height: 240px;
+}
+.flow-table,
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.flow-table thead th,
+.user-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  text-align: left;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: var(--bw) solid var(--border-strong);
+  color: var(--text-muted);
+  font-weight: 650;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.user-table th {
+  position: static;
+}
+.flow-table tbody td,
+.user-table td {
+  padding: var(--sp-1) var(--sp-4);
+  border-bottom: var(--bw) solid var(--border);
+  vertical-align: middle;
+  height: 24px;
+}
+.user-table td {
+  padding: var(--sp-3) var(--sp-4);
+}
+.user-table {
+  margin: var(--sp-4) 0 var(--sp-5);
+}
+.flow-table tbody tr:hover {
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.flow-table tbody tr.open {
+  background: var(--surface-3);
+}
+
+/* Verdict marker on the row: the fastest read in the table. */
+.flow-table tr.sev-good {
+  border-left: var(--bw-marker) solid var(--good);
+}
+.flow-table tr.sev-warn {
+  border-left: var(--bw-marker) solid var(--warn);
+}
+.flow-table tr.sev-bad {
+  border-left: var(--bw-marker) solid var(--bad);
+}
+.flow-table tr.sev-info {
+  border-left: var(--bw-marker) solid var(--info);
+}
+
+/* Fixed, drag-resizable column widths: content never resizes a column. */
+.flow-table.fixed {
+  table-layout: fixed;
+  width: auto;
+}
+.flow-table.fixed thead th,
+.flow-table.fixed tbody td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flow-table.fixed .detail-row td {
+  overflow: visible;
+  white-space: normal;
+}
+.th-label {
+  display: inline-block;
+  max-width: calc(100% - var(--sp-3));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 7px;
+  cursor: col-resize;
+  user-select: none;
+}
+.col-resize:hover {
+  background: var(--accent);
+}
+body.col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Expanded row */
+.detail-row td {
+  background: var(--surface-2);
+  padding: var(--sp-5) var(--sp-6) !important;
+  border-bottom: var(--bw) solid var(--border-strong);
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-4) var(--sp-7);
+}
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.detail.wide {
+  grid-column: 1 / -1;
+}
+.dk {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dv {
+  word-break: break-all;
+}
+
+/* -- 10  View settings tab ------------------------------------------------ */
+.view-page {
+  max-width: 1120px;
+}
+.view-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--sp-5);
+  align-items: start;
+}
+.chips-section {
+  grid-column: 1 / -1;
+}
+.vs-head,
+.overview-head,
+.log-head,
+.settings-head,
+.feed-head,
+.cpb-head,
+.settings-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+.ov-title {
+  font-size: var(--fs-xl);
+  margin: 0;
+}
+.vs-hint {
+  margin: 0 0 var(--sp-5);
+  max-width: 70ch;
+}
+.save-badge {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+.save-badge.on {
+  color: var(--good-ink);
+}
+
+.chip-manage-list,
+.col-manage-list,
+.fill-list,
+.kv-list,
+.dir-list,
+.cpb-rows {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.col-manage-list {
+  max-height: 420px;
+  overflow: auto;
+}
+.chip-manage-row,
+.col-item,
+.cpb-row,
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--bw) solid transparent;
+  border-radius: var(--r-control);
+  min-width: 0;
+}
+.chip-manage-row {
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border-color: var(--border);
+  background: var(--surface-2);
+  margin-bottom: var(--sp-2);
+}
+.col-item:hover,
+.preset-row:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.chip-query-txt,
+.chip-row-label,
+.fill-name,
+.cpb-user,
+.cpb-rule {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-query-txt {
+  color: var(--text-muted);
+  background: transparent;
+}
+.chip-row-actions,
+.chip-manage-actions {
+  flex: none;
+  gap: var(--sp-1);
+}
+.drag-handle {
+  cursor: grab;
+  color: var(--text-faint);
+  user-select: none;
+}
+.preset-load {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+}
+.preset-row {
+  gap: var(--sp-1);
+}
+
+/* Inline chip editor on the view tab, same fields as the modal editor. */
+.chip-editor-inline {
+  border: var(--bw) solid var(--accent);
+  border-radius: var(--r-panel);
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-5);
+  background: var(--surface-2);
+}
+.cei-row {
+  display: flex;
+  gap: var(--sp-5);
+  align-items: flex-end;
+}
+.cei-row.cei-bottom {
+  margin-top: var(--sp-5);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.editor-field,
+.cfg-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.editor-field {
+  margin-bottom: var(--sp-4);
+}
+.editor-field > span,
+.settings-label {
+  display: block;
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.editor-field input,
+.editor-field select {
+  width: 100%;
+}
+.editor-field.grow {
+  flex: 1 1 auto;
+}
+.color-picker {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--r-control);
+  border: var(--bw) solid var(--border-strong);
+  cursor: pointer;
+}
+.swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.color-free {
+  width: 30px;
+  height: 24px;
+  padding: 0 var(--sp-1);
+  cursor: pointer;
+}
+
+/* Chip editor live preview over sample log lines */
+.chip-preview-box {
+  margin-top: var(--sp-5);
+  border-top: var(--bw) solid var(--border);
+  padding-top: var(--sp-4);
+}
+.cpb-head {
+  font-size: var(--fs-xs);
+  margin-bottom: var(--sp-3);
+}
+.cpb-rows {
+  gap: var(--sp-1);
+}
+.cpb-row {
+  display: grid;
+  grid-template-columns: 40px minmax(100px, 1.3fr) minmax(130px, 1.1fr) minmax(100px, 1.5fr) auto;
+  gap: var(--sp-4);
+  font-size: var(--fs-sm);
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+.cpb-ips {
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.cpb-empty {
+  padding: var(--sp-3) 0;
+}
+
+/* -- 11  Overlays ---------------------------------------------------------
+   The only elements allowed a shadow, because they genuinely float. */
+.chip-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6);
+  background: var(--scrim);
+}
+.chip-editor,
+.dir-picker {
+  width: 440px;
+  max-width: 100%;
+  max-height: 86vh;
+  overflow: auto;
+  padding: var(--sp-6);
+  box-shadow: var(--shadow-pop);
+}
+.dir-picker {
+  width: 560px;
+}
+.dir-list {
+  gap: var(--sp-1);
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+}
+.dir-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.dir-row:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+.dir-row:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  width: 280px;
+  max-height: 72vh;
+  overflow: auto;
+  z-index: 30;
+  padding: var(--sp-5);
+  box-shadow: var(--shadow-pop);
+}
+.settings-section {
+  border-top: var(--bw) solid var(--border);
+  padding: var(--sp-4) 0;
+}
+.settings-section:last-child {
+  padding-bottom: 0;
+}
+.settings-label {
+  margin-bottom: var(--sp-3);
+}
+.settings-label-row {
+  margin-bottom: var(--sp-3);
+}
+.settings-label-row .settings-label {
+  margin-bottom: 0;
+}
+
+.suggest {
+  position: absolute;
+  top: calc(100% + var(--sp-1));
+  left: 0;
+  min-width: 220px;
+  max-width: 100%;
+  max-height: 260px;
+  overflow: auto;
+  z-index: 40;
+  padding: var(--sp-1);
+  background: var(--surface);
+  border: var(--bw) solid var(--border-strong);
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-pop);
+}
+.suggest-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: var(--sp-2) var(--sp-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.suggest-item.active,
+.suggest-item:hover {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+}
+
+/* -- 12  Admin tabs ------------------------------------------------------- */
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.admin-grid,
+.feeds-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--sp-5);
+  align-items: start;
+}
+.feeds-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+.admin-grid .panel.wide {
+  grid-column: 1 / -1;
+}
+
+/* Stat tiles share the panel surface, the number carries the hierarchy. */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-4);
+}
+.stat {
+  background: var(--surface);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-panel);
+  padding: var(--sp-4) var(--sp-5);
+}
+.stat-value {
+  font-size: var(--fs-stat);
+  font-weight: 650;
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+.stat-label {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: var(--sp-1);
+}
+.stat-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+/* Key/value lists: one definition, used by every admin tab. */
+.kv-list {
+  gap: 0;
+}
+.kv,
+.log-row,
+.set-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-5);
+  padding: var(--sp-3) 0;
+  border-bottom: var(--bw) solid var(--border);
+}
+.kv:last-child,
+.log-row:last-child {
+  border-bottom: none;
+}
+.kv-k {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  flex: none;
+}
+.kv-v {
+  text-align: right;
+  min-width: 0;
+}
+
+/* Feed health */
+.feed-card {
+  background: var(--surface-2);
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-panel);
+  padding: var(--sp-5);
+}
+.feed-head {
+  margin-bottom: var(--sp-1);
+}
+.feed-meta {
+  margin-bottom: var(--sp-4);
+}
+.fill-list {
+  gap: var(--sp-1);
+}
+.fill-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 40px;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.fill-name {
+  font-size: var(--fs-xs);
+}
+.fill-bar {
+  height: 6px;
+  background: var(--surface-3);
+  border-radius: var(--r-control);
+  overflow: hidden;
+}
+.fill-in {
+  display: block;
+  height: 100%;
+  background: var(--good);
+}
+.fill-in.partial {
+  background: var(--warn);
+}
+.fill-pct {
+  font-size: var(--fs-xs);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Settings rows: label plus hint on the left, one control on the right. */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+}
+.set-row:last-of-type {
+  border-bottom: none;
+}
+.set-row label {
+  margin: 0;
+}
+.set-label {
+  display: block;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.set-row input {
+  width: 120px;
+  flex: none;
+}
+.form-actions {
+  margin-top: var(--sp-5);
+}
+
+/* Config forms (LDAP, SSO, update): real text fields in a two column grid. */
+.cfg-page {
+  max-width: 920px;
+}
+.cfg-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.cfg-section {
+  border: var(--bw) solid var(--border);
+  border-radius: var(--r-panel);
+  padding: var(--sp-5);
+}
+.cfg-section > h3 {
+  margin: 0 0 var(--sp-5);
+}
+.cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+.cfg-field.col-2 {
+  grid-column: 1 / -1;
+}
+.cfg-field label {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.cfg-field input:not([type="checkbox"]),
+.cfg-field select {
+  width: 100%;
+}
+.cfg-check {
+  flex-direction: row;
+}
+.cfg-check input {
+  width: auto;
+}
+
+/* Accounts */
+.inline-form {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-width: 320px;
+}
+.stack-form button {
+  margin-top: var(--sp-3);
+}
+.perm-matrix th.perm-col {
+  font-size: var(--fs-micro);
+  white-space: normal;
+  max-width: 90px;
+  text-align: center;
+  vertical-align: bottom;
+  line-height: var(--lh-tight);
+}
+.perm-matrix td.perm-cell {
+  text-align: center;
+}
+.perm-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-6);
+  margin-top: var(--sp-4);
+}
+.role-select {
+  padding: var(--sp-1) var(--sp-2);
+}
+
+/* Audit log */
+.audit-filters {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+}
+.audit-filters select,
+.audit-filters input {
+  width: auto;
+}
+.audit-filters input {
+  min-width: 180px;
+}
+
+/* Error log: one line per event, level carries the colour. */
+.log-head {
+  align-items: flex-start;
+}
+.log-row {
+  display: grid;
+  grid-template-columns: 150px 70px 1fr;
+  gap: var(--sp-4);
+  align-items: baseline;
+  justify-content: initial;
+}
+.log-fields {
+  word-break: break-word;
+}
+
+/* -- 13  Responsive -------------------------------------------------------
+   Everything collapses to a single column well before 900px. The flow table
+   keeps its own horizontal scroll inside .table-wrap. */
+@media (max-width: 900px) {
+  .admin-grid,
+  .view-grid,
+  .cfg-grid {
+    grid-template-columns: 1fr;
+  }
+  .content {
+    padding: var(--sp-4);
+  }
+  .topbar {
+    height: auto;
+    flex-wrap: wrap;
+    gap: var(--sp-4);
+    padding: var(--sp-2) var(--sp-4);
+  }
+  .topbar-right {
+    gap: var(--sp-4);
+  }
+  .cei-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .set-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-2);
+  }
+  .set-row input {
+    width: 100%;
+  }
+  .log-row {
+    grid-template-columns: 1fr;
+    gap: var(--sp-1);
+  }
+  .fill-row {
+    grid-template-columns: 90px 1fr 36px;
+  }
+  .ellip,
+  .target {
+    max-width: 180px;
+  }
+}
+
+/* ── App footer ─────────────────────────────────────────────────────
+   Carries the source link. The AGPL expects people who use the app over a
+   network to be able to reach its source, so it belongs in the running
+   interface rather than only in the repository. */
+.appfoot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4) var(--sp-6);
+  border-top: var(--bw) solid var(--border);
+  background: var(--surface);
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+.appfoot a {
+  color: var(--text-faint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.appfoot a:hover {
+  color: var(--accent);
+}

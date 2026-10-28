@@ -1,0 +1,12 @@
+# Watches the trigger file, which the admin backend writes when "update now" is clicked.
+# Install to: /etc/systemd/system/zscaler-admin-ui-update.path
+#   sudo systemctl enable --now zscaler-admin-ui-update.path
+[Unit]
+Description=Zscaler Admin UI: watch the update trigger
+
+[Path]
+PathModified=/opt/zscaler-admin-ui/logs/update.trigger
+Unit=zscaler-admin-ui-update.service
+
+[Install]
+WantedBy=multi-user.target

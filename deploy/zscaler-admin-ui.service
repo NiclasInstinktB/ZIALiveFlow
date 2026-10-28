@@ -1,0 +1,34 @@
+# Zscaler Admin UI: main service (uvicorn behind nginx).
+# Install to: /etc/systemd/system/zscaler-admin-ui.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now zscaler-admin-ui
+[Unit]
+Description=ZIA Live-Flow Admin UI (NSS web, firewall and DNS live troubleshooting)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zscaler-admin
+Group=zscaler-admin
+WorkingDirectory=/opt/zscaler-admin-ui
+EnvironmentFile=/opt/zscaler-admin-ui/.env
+# The web app listens on localhost only; nginx terminates TLS and proxies here.
+# The NSS ingest ports (5140/5141) are bound separately by the app, on INGEST_BIND_HOST (.env).
+# Started through serve.py rather than uvicorn directly. The bind address and port are
+# editable in the admin backend, and serve.py loads those stored values before binding.
+# Calling uvicorn directly would pin the port on this command line and silently ignore
+# whatever an operator sets in the UI. Add --host/--port here only to force an override.
+ExecStart=/opt/zscaler-admin-ui/.venv/bin/python serve.py --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Writable: runtime data, logs, and the git repo (the updater runs reset --hard).
+ReadWritePaths=/opt/zscaler-admin-ui/backend/data /opt/zscaler-admin-ui/logs /opt/zscaler-admin-ui/.git
+
+[Install]
+WantedBy=multi-user.target

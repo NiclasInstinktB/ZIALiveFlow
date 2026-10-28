@@ -1,0 +1,48 @@
+# ── Python ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ── Frontend (Node / Vite build) ────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+npm-debug.log*
+yarn-error.log*
+
+# ── Secrets / environment (NEVER commit) ────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+
+# ── Runtime data (host-specific, contains password hashes) ──────────
+backend/data/
+logs/
+
+# ── Server artifacts (in case the repo lives in the service HOME) ───
+.ssh/
+.git-credentials
+deploy_key
+deploy_key.pub
+known_hosts
+
+# ── Editors ─────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+
+# ── OS ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,16 @@
+# Runs the update once, triggered by zscaler-admin-ui-update.path.
+# Install to: /etc/systemd/system/zscaler-admin-ui-update.service
+[Unit]
+Description=Zscaler Admin UI: run the update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=zscaler-admin
+Group=zscaler-admin
+WorkingDirectory=/opt/zscaler-admin-ui
+EnvironmentFile=/opt/zscaler-admin-ui/.env
+ExecStart=/bin/bash /opt/zscaler-admin-ui/deploy/update.sh
+# The build (npm ci + vite) can take a while.
+TimeoutStartSec=900
