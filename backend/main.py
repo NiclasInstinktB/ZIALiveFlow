@@ -44,6 +44,9 @@ async def lifespan(app: FastAPI):
     # how the bind address gets applied; calling it again here is cheap and keeps a
     # bare "uvicorn backend.main:app" correct for everything except the bind address.
     settings_store.load_and_apply()
+    # Remember what we actually came up with, so the admin UI can still say "needs a
+    # restart" after a page reload rather than only in the reply to the save.
+    settings_store.mark_boot_state()
 
     log.info(
         "app.startup",
@@ -128,10 +131,24 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # "*" together with credentials is not "open to everyone", it is worse than it
+    # looks: Starlette answers a cookie-carrying request by echoing the requesting
+    # origin back with Access-Control-Allow-Credentials, so ANY page on the internet
+    # could call this API with the visitor's session and read the answer, which undoes
+    # the permission check on every route. An operator who types "*" into the settings
+    # form gets the wildcard they asked for, but without credentials.
+    origins = settings.cors_origin_list
+    allow_credentials = "*" not in origins
+    if not allow_credentials:
+        log.warning(
+            "security.cors_wildcard",
+            hint="CORS_ORIGINS='*' cannot carry the session cookie. List the origins explicitly.",
+        )
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
+        allow_origins=origins,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )

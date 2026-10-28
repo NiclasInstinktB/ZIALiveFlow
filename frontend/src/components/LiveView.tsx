@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { useTranslation } from "react-i18next";
 import i18nInstance from "../i18n";
 import type { TFunction } from "i18next";
-import { api } from "../api";
+import { api, notifyUnauthorized } from "../api";
 import { ALL_FEEDS } from "../types";
 import type {
   ChipColor,
@@ -455,6 +455,9 @@ export function LiveView({
   const [paused, setPaused] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
+  // Filter fields the server refused for this session. It drops them from the filter
+  // and says so in the snapshot, so the bar must not keep showing them as active.
+  const [deniedFields, setDeniedFields] = useState<FilterField[]>([]);
 
   // Personalisation (persisted per account).
   const [layout, setLayout] = useState<LayoutItem[]>(defaultLayout);
@@ -466,6 +469,7 @@ export function LiveView({
   const [feeds, setFeeds] = useState<FeedType[]>(ALL_FEEDS);
   const [showSettings, setShowSettings] = useState(false);
   const loadedRef = useRef(false);
+  const loadedPrefs = useRef<Record<string, unknown>>({});
   const dragIndex = useRef<number | null>(null);
   const chipDragIndex = useRef<number | null>(null);
   const pendingPrefs = useRef<Record<string, unknown> | null>(null);
@@ -501,16 +505,26 @@ export function LiveView({
 
   // ── Load prefs + global chips ──────────────────────────────────
   useEffect(() => {
+    // A prefs read that FAILED must not look like "nothing stored". The defaults below
+    // would otherwise be saved straight back over the stored blob by the debounced save,
+    // and the whole personalisation would be gone after one unlucky request.
+    let prefsOk = true;
     Promise.all([
-      api.getPrefs().catch(() => ({} as Record<string, unknown>)),
+      api.getPrefs().catch(() => {
+        prefsOk = false;
+        return {} as Record<string, unknown>;
+      }),
       api.getChips().catch(() => ({ global: [] as QueryChip[], can_edit_global: false })),
     ])
       .then(([p, ch]) => {
+        loadedPrefs.current = p || {};
         setLayout(mergeLayout(p?.columns));
         if (p?.colWidths && typeof p.colWidths === "object") {
           const cw: Record<string, number> = {};
           for (const [k, v] of Object.entries(p.colWidths as Record<string, unknown>)) {
-            if (COLUMN_BY_KEY[k] && typeof v === "number" && v >= 50 && v <= 900) cw[k] = v;
+            // Same bounds as the resize drag below, otherwise a width the user is
+            // allowed to drag to is thrown away again on the next load.
+            if (COLUMN_BY_KEY[k] && typeof v === "number" && v >= 60 && v <= 1000) cw[k] = v;
           }
           setColWidths(cw);
         }
@@ -540,17 +554,36 @@ export function LiveView({
         setChipView(mergeChipView(p?.chipView, [...glob, ...personal]));
       })
       .finally(() => {
-        loadedRef.current = true;
+        loadedRef.current = prefsOk;
       });
   }, []);
 
   // ── Save prefs (debounced) ─────────────────────────────────────
   useEffect(() => {
     if (!loadedRef.current) return;
-    const payload = { columns: layout, colWidths, limit, filterFields, feeds, presets, personalChips, chipView };
+    // PUT /api/prefs replaces the whole blob, so keys this view does not manage have to
+    // be carried over or they are dropped.
+    const payload = {
+      ...loadedPrefs.current,
+      columns: layout,
+      colWidths,
+      limit,
+      filterFields,
+      feeds,
+      presets,
+      personalChips,
+      chipView,
+    };
     pendingPrefs.current = payload;
     const t = window.setTimeout(() => {
-      api.savePrefs(payload).then(() => (pendingPrefs.current = null)).catch(() => {});
+      api
+        .savePrefs(payload)
+        .then(() => {
+          // Only clear when nothing newer is waiting, otherwise a change made while this
+          // request was in flight is dropped by the flush below.
+          if (pendingPrefs.current === payload) pendingPrefs.current = null;
+        })
+        .catch(() => {});
     }, 700);
     return () => window.clearTimeout(t);
   }, [layout, colWidths, limit, filterFields, feeds, presets, personalChips, chipView]);
@@ -603,6 +636,16 @@ export function LiveView({
   }, [presets, obfuscated, selectableFields]);
 
   // ── WebSocket: one view per session ────────────────────────────
+  // Throw out the filters the server refused, both from the bar and from what a
+  // reconnect would send again. No set_filters goes back out: the server has already
+  // applied this and answered with the matching snapshot.
+  const dropDenied = useCallback((denied: FilterField[]) => {
+    const strip = (gs: FilterGroup[]) =>
+      pruneGroups(gs.map((g) => ({ ...g, items: g.items.filter((f) => !denied.includes(f.field)) })));
+    setGroups((prev) => strip(prev));
+    appliedRef.current = { ...appliedRef.current, groups: strip(appliedRef.current.groups) };
+  }, []);
+
   const connect = useCallback(() => {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${location.host}/api/stream/ws`);
@@ -617,11 +660,29 @@ export function LiveView({
     ws.onclose = (ev) => {
       setConnected(false);
       wsRef.current = null;
-      if (closingRef.current || ev.code === 1008) return;
+      if (closingRef.current) return;
+      if (ev.code === 1008) {
+        // 1008 covers two very different things, and the reason string is the only way
+        // to tell them apart. An older server sends none, so anything we do not know
+        // keeps the old behaviour: stop reconnecting and stay quiet.
+        if (ev.reason === "unauthorized") {
+          // session's gone. hand it to the same path an HTTP 401 takes, so the user gets
+          // the sign-out message that already exists (and is already translated) rather
+          // than a second home-grown expiry notice.
+          notifyUnauthorized();
+        }
+        return;
+      }
       reconnectRef.current = window.setTimeout(connect, 2000);
     };
     ws.onmessage = (ev) => {
-      let msg: { type: string; records?: FlowRecord[]; record?: FlowRecord; stats?: StreamStats };
+      let msg: {
+        type: string;
+        records?: FlowRecord[];
+        record?: FlowRecord;
+        stats?: StreamStats;
+        denied_fields?: string[];
+      };
       try {
         msg = JSON.parse(ev.data);
       } catch {
@@ -631,6 +692,14 @@ export function LiveView({
         setRecords(msg.records.slice().reverse().slice(0, MAX_ROWS));
         if (msg.stats) setStats(msg.stats);
         setExpanded(null);
+        // Fields the server threw out of the filter (someone lost the logs permission
+        // mid-session, for instance). Every snapshot carries the current answer, so an
+        // empty list clears the warning again.
+        const denied = (msg.denied_fields ?? []).filter((f): f is FilterField =>
+          (ALL_FILTER_FIELDS as string[]).includes(f)
+        );
+        setDeniedFields(denied);
+        if (denied.length) dropDenied(denied);
       } else if (msg.type === "record" && msg.record) {
         if (pausedRef.current) return;
         const rec = msg.record;
@@ -639,7 +708,7 @@ export function LiveView({
         setStats(msg.stats);
       }
     };
-  }, []);
+  }, [dropDenied]);
 
   useEffect(() => {
     closingRef.current = false;
@@ -806,11 +875,14 @@ export function LiveView({
   }
   function saveChip(chip: QueryChip, scope: ChipScope) {
     if (scope === "global") {
+      const before = globalChips;
       const next = globalChips.some((c) => c.id === chip.id)
         ? globalChips.map((c) => (c.id === chip.id ? chip : c))
         : [...globalChips, chip];
       setGlobalChips(next);
-      api.saveGlobalChips(next).catch(() => {});
+      // Global chips live on the server, not in the prefs. If the write is refused the
+      // list has to go back, otherwise the bar keeps showing a chip nobody else has.
+      api.saveGlobalChips(next).catch(() => setGlobalChips(before));
     } else {
       const next = personalChips.some((c) => c.id === chip.id)
         ? personalChips.map((c) => (c.id === chip.id ? chip : c))
@@ -822,9 +894,10 @@ export function LiveView({
   function deleteChip(chip: ScopedChip) {
     if (chip.scope === "global") {
       if (!canEditGlobal) return;
+      const before = globalChips;
       const next = globalChips.filter((c) => c.id !== chip.id);
       setGlobalChips(next);
-      api.saveGlobalChips(next).catch(() => {});
+      api.saveGlobalChips(next).catch(() => setGlobalChips(before));
     } else {
       setPersonalChips(personalChips.filter((c) => c.id !== chip.id));
     }
@@ -1287,6 +1360,8 @@ export function LiveView({
           </div>
         </div>
       </div>
+
+      {deniedFields.length > 0 && <div className="error-box">{t("live.err.filterDenied")}</div>}
 
       {/* ── Query search + chip quick filters ──────────────────── */}
       <div className="subbar">

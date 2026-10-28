@@ -19,13 +19,27 @@ import jwt
 from backend.config import settings
 
 
-def create_session_token(username: str, display_name: str, source: str = "local", permissions=()) -> str:
+def create_session_token(
+    username: str,
+    display_name: str,
+    source: str = "local",
+    permissions=(),
+    session_start: int | None = None,
+) -> str:
+    """Mint a session token.
+
+    ``session_start`` is when the person actually signed in, and it survives every
+    renewal. ``iat`` moves each time the cookie is refreshed, so on its own it cannot
+    answer "how long has this session been going", which is what the renewal cap in
+    deps.py needs.
+    """
     now = datetime.now(timezone.utc)
     payload = {
         "sub": username,
         "name": display_name,
         "src": "ad" if source == "ad" else "local",
         "iat": int(now.timestamp()),
+        "sst": int(session_start if session_start is not None else now.timestamp()),
         "exp": int((now + timedelta(minutes=settings.session_ttl_minutes)).timestamp()),
     }
     if payload["src"] == "ad":

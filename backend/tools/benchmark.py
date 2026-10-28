@@ -32,7 +32,10 @@ def _prepare(ratio: float) -> list[bytes]:
 
 def _run(name: str, lines: list[bytes]) -> None:
     hub = get_hub()
-    hub.set_filters([FilterSpec(field=FilterField.SRC_IP, value="10.20.30.40")])
+    # Filters live on a view (one per WebSocket session), not on the hub, so the
+    # benchmark registers one the way a connected client would.
+    view = hub.register()
+    view.set_filters([FilterSpec(field=FilterField.SRC_IP, value="10.20.30.40")])
     handle = hub.handle_fields
     t0 = time.perf_counter()
     for raw in lines:
@@ -43,8 +46,11 @@ def _run(name: str, lines: list[bytes]) -> None:
     print(
         f"{name:<28} {N:>9,} lines in {dt:6.2f}s  ->  {rate:>10,.0f}/s  "
         f"({rate * 60 / 1_000_000:5.2f} M/min)  |  {rate / TARGET_PER_SEC:4.1f}x target  "
-        f"|  buffered: {hub.stats()['buffered']:,}"
+        f"|  buffered: {view.stats()['buffered']:,}"
     )
+    # Without this the next run delivers into this view as well and measures something
+    # other than what it reports.
+    hub.unregister(view)
 
 
 def main() -> None:

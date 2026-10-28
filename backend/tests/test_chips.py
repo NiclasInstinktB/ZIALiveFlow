@@ -79,3 +79,34 @@ def test_replace_caps_length(tmp_path, monkeypatch):
     many = [{"id": f"c{i}", "label": f"L{i}", "query": "x=1", "color": "info"} for i in range(200)]
     result = chips_store.replace_global(many)
     assert len(result) == chips_store._MAX_CHIPS
+
+
+# ── A damaged file must not take the chip bar down with it ─────────
+def test_list_survives_a_file_that_is_not_an_object(tmp_path, monkeypatch):
+    p = _use_tmp(tmp_path, monkeypatch)
+    p.write_text("[1, 2, 3]", encoding="utf-8")
+    assert chips_store.list_global() == []
+
+
+def test_list_survives_a_chips_value_that_is_not_a_list(tmp_path, monkeypatch):
+    p = _use_tmp(tmp_path, monkeypatch)
+    p.write_text('{"chips": 5}', encoding="utf-8")
+    assert chips_store.list_global() == []
+
+
+def test_replace_keeps_ids_unique_when_the_renamed_id_is_taken(tmp_path, monkeypatch):
+    """The dedup rename must not collide with an id that is already in the list.
+
+    Chip ids key the per-account show/hide and order prefs, so two chips sharing one id
+    cannot be hidden or reordered independently.
+    """
+    _use_tmp(tmp_path, monkeypatch)
+    result = chips_store.replace_global(
+        [
+            {"id": "a", "label": "First", "query": "x=1", "color": "info"},
+            {"id": "a_2", "label": "Second", "query": "y=2", "color": "info"},
+            {"id": "a", "label": "Third", "query": "z=3", "color": "info"},
+        ]
+    )
+    assert len(result) == 3
+    assert len({c["id"] for c in result}) == 3

@@ -33,6 +33,7 @@ not hang off an account record (AD users do not have one).
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import secrets
@@ -97,16 +98,25 @@ class AdminStore:
         self._identities: dict[str, dict] = {}
         # State of the file at the last read or write. If someone changes it from the
         # outside (the CLI on the server), it is reloaded before the next access.
-        self._signature: tuple[int, int] | None = None
+        self._signature: tuple[int, str] | None = None
         self._load()
 
     # ── Persistence ───────────────────────────────────────────────
-    def _signature_on_disk(self) -> tuple[int, int] | None:
+    def _signature_on_disk(self) -> tuple[int, str] | None:
+        """Identify the file by its CONTENT, not by its stat data.
+
+        (mtime, size) cannot tell two versions apart reliably: file timestamps are only
+        accurate to a few milliseconds, so a second write inside the same tick that
+        happens to produce the same number of bytes (one permission swapped for another
+        of equal length) looks unchanged. :meth:`_sync` would then miss it and the next
+        write in this process would put the old permissions back, which is exactly the
+        clobbering this reconciliation exists to prevent.
+        """
         try:
-            st = self._path.stat()
-            return (st.st_mtime_ns, st.st_size)
+            raw = self._path.read_bytes()
         except OSError:
             return None
+        return (len(raw), hashlib.sha256(raw).hexdigest())
 
     def _sync(self) -> None:
         """Reload the file if it was changed from the outside.
@@ -135,23 +145,28 @@ class AdminStore:
             return
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-            self._accounts = {a["username"].lower(): a for a in data.get("accounts", [])}
-            self._groups = {}
+            # Parse into locals and swap in only once the whole file has come through.
+            # Assigning field by field would leave the accounts of the new file next to
+            # the groups of the old one if the parse gives up half way.
+            accounts = {a["username"].lower(): a for a in data.get("accounts", [])}
+            groups: dict[str, dict] = {}
             for g in data.get("groups", []):
                 name = str(g.get("group") or g.get("name") or "").strip()
                 if name:
-                    self._groups[name.lower()] = g
-            self._prefs = {
+                    groups[name.lower()] = g
+            prefs = {
                 str(k).lower(): dict(v)
                 for k, v in (data.get("prefs") or {}).items()
                 if isinstance(v, dict)
             }
-            self._identities = {
+            identities = {
                 str(k).lower(): dict(v)
                 for k, v in (data.get("ad_identities") or {}).items()
                 if isinstance(v, dict)
             }
             schema = int(data.get("schema", 1))
+            self._accounts, self._groups = accounts, groups
+            self._prefs, self._identities = prefs, identities
             if schema < SCHEMA_VERSION:
                 if schema < 2:
                     self._migrate_to_v2()
@@ -166,11 +181,12 @@ class AdminStore:
                 )
             self._signature = self._signature_on_disk()
         except (OSError, ValueError, KeyError):
+            # Keep whatever is already in memory. A file that is unreadable for a moment
+            # (a partial write, a lock held by another process) must not empty the live
+            # account database, because the next write would then persist that empty
+            # state over the file and lock everyone out for good. The signature is left
+            # alone as well, so the next access retries the load.
             log.error("admin.store_load_failed", path=str(self._path))
-            self._accounts = {}
-            self._groups = {}
-            self._prefs = {}
-            self._identities = {}
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -535,7 +551,12 @@ class AdminStore:
             if key not in self._identities:
                 raise KeyError(username)
             del self._identities[key]
-            self._prefs.pop(key, None)
+            # Prefs are keyed by username alone, and a local account can carry the same
+            # name as a directory user (the directory user signed in before the account
+            # was created). Dropping them unconditionally would take the local account's
+            # saved views with the directory entry.
+            if key not in self._accounts:
+                self._prefs.pop(key, None)
             self._save()
             log.info("admin.ad_identity_forgotten", username=username)
 
@@ -560,21 +581,28 @@ class AdminStore:
             rec = self._accounts.get(username.lower())
             if not rec:
                 raise KeyError(username)
+            # Work the WHOLE batch out and check it before a single field is written.
+            # Applying field by field leaves a refused 'enabled' behind a password that
+            # has already been swapped in memory and never reaches the file: the caller
+            # is told the update failed, while the old password has stopped working in
+            # the running process and comes back at the next restart.
+            changes: dict[str, object] = {}
             if password:
                 if normalize_source(rec.get("source")) != SOURCE_LOCAL:
                     raise ValueError("AD accounts have no local password.")
-                rec["password_hash"] = hash_password(password)
+                changes["password_hash"] = hash_password(password)
             if display_name is not None:
-                rec["display_name"] = display_name.strip() or rec["username"]
+                changes["display_name"] = display_name.strip() or rec["username"]
             if enabled is not None:
                 before = len(self._local_managers())
                 old = rec.get("enabled", True)
-                rec["enabled"] = bool(enabled)
+                rec["enabled"] = bool(enabled)  # the guard can only judge the new state
                 try:
                     self._guard_manager(before, "The last local account with the 'accounts' permission cannot be deactivated.")
-                except LastAdminError:
+                finally:
                     rec["enabled"] = old
-                    raise
+                changes["enabled"] = bool(enabled)
+            rec.update(changes)
             self._save()
             log.info("admin.updated", username=rec["username"])
             return self._public(rec)
@@ -670,6 +698,24 @@ class AdminStore:
             self._save()
             log.info("admin.group_updated", group=rec["name"], permissions=rec["permissions"])
             return self._public_group(rec)
+
+    def ensure_group_renameable(self, name: str, new_name: str) -> None:
+        """Would ``rename_group`` succeed? Raises the same errors, changes nothing.
+
+        The route needs to know before it starts writing. It used to set the permissions
+        first and rename afterwards, so a name that was already taken left the permission
+        change applied and saved while the caller got a 400 telling them it had failed.
+        """
+        new_name = (new_name or "").strip()
+        if not new_name:
+            raise ValueError("Group name must not be empty.")
+        with self._locked():
+            key = name.lower()
+            if key not in self._groups:
+                raise KeyError(name)
+            new_key = new_name.lower()
+            if new_key != key and new_key in self._groups:
+                raise ValueError("Group already exists.")
 
     def rename_group(self, name: str, new_name: str) -> dict:
         """Rename a group. Permissions and members stay as they are: the name is only a
@@ -825,9 +871,18 @@ class AdminStore:
             pw = secrets.token_urlsafe(18)
             generated = True
         self.create(user, pw, display_name=user)
+        # The name can already be taken, typically by a legacy AD group of the same name
+        # imported at startup. Giving up here would leave the bootstrap half done: an
+        # account without any permission, in a store that is no longer empty and will
+        # therefore never be seeded again. Joining the existing group instead is not an
+        # option either, because that would hand full access to whoever sits in it.
+        group_name, n = "Administrators", 2
+        with self._locked():
+            while group_name.lower() in self._groups:
+                group_name, n = f"Administrators {n}", n + 1
         # Flag instead of list: this group should hold future permissions automatically too.
         self.create_group(
-            "Administrators", ALL_PERMISSIONS,
+            group_name, ALL_PERMISSIONS,
             members=[{"type": MEMBER_LOCAL, "ref": user}], all_permissions=True,
         )
         if generated:

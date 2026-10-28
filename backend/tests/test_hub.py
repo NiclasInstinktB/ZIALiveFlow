@@ -159,3 +159,122 @@ def test_view_feed_selection():
     assert [r["logtype"] for r in only_dns.snapshot()] == ["dns"]
     assert no_dns.stats()["feeds"] == ["fw", "web"]
     assert everything.stats()["feeds"] == ["dns", "fw", "web"]
+
+
+# ── A rejected group must not widen an AND join ───────────────────
+def _src(v):
+    return FilterSpec(field=FilterField.SRC_IP, value=v)
+
+
+def _dst(v):
+    return FilterSpec(field=FilterField.DST_IP, value=v)
+
+
+def test_and_join_dropped_when_a_group_is_rejected():
+    """``compile_groups`` already protects an AND group whose condition is discarded;
+    the same has to hold for an AND join BETWEEN groups.
+
+    What arrives: the operator asks for "source in 10.20.30.0/24 AND destination in
+    10.0.0.0/8". The /8 is rejected by the server protection, so only the source group
+    survives. Joined with AND, that leaves "source in 10.20.30.0/24" against ANY
+    destination, which is far more than was asked for, and it is exactly the flood the
+    CIDR guard exists to prevent.
+    """
+    hub = Hub()
+    v = hub.register()
+    v.set_filters(
+        [
+            FilterGroup(op=FilterOp.OR, items=[_src("10.20.30.0/24")]),
+            FilterGroup(op=FilterOp.OR, items=[_dst("10.0.0.0/8")]),
+        ],
+        FilterOp.AND,
+    )
+    # Destination 203.0.113.9 is not in 10.0.0.0/8, so this line was never asked for.
+    hub.handle_fields(_web("10.20.30.5", "a@b"))
+    assert v.stats()["matched"] == 0
+    assert v.snapshot() == []
+
+
+def test_and_join_survives_when_every_group_compiles():
+    """The guard must not break the normal case."""
+    hub = Hub()
+    v = hub.register()
+    v.set_filters(
+        [
+            FilterGroup(op=FilterOp.OR, items=[_src("10.0.0.1")]),
+            FilterGroup(op=FilterOp.OR, items=[_dst("1.1.1.1")]),
+        ],
+        FilterOp.AND,
+    )
+    hub.handle_fields(_web("10.0.0.1", "a@b"))
+    assert v.stats()["matched"] == 1
+
+
+def test_or_join_keeps_the_groups_that_compiled():
+    """With OR between the groups a dropped group makes the filter NARROWER, which is the
+    safe direction, so the rest stays active."""
+    hub = Hub()
+    v = hub.register()
+    v.set_filters(
+        [
+            FilterGroup(op=FilterOp.OR, items=[_src("10.0.0.1")]),
+            FilterGroup(op=FilterOp.OR, items=[_dst("10.0.0.0/8")]),  # rejected
+        ],
+        FilterOp.OR,
+    )
+    hub.handle_fields(_web("10.0.0.1", "a@b"))
+    assert v.stats()["matched"] == 1
+
+
+# ── Feed selection: the three edge cases ──────────────────────────
+def _only(feeds):
+    hub = Hub()
+    v = hub.register()
+    v.set_filters([FilterSpec(field=FilterField.SRC_IP, value="10.0.0.1")], feeds=feeds)
+    hub.handle_fields(_web("10.0.0.1", "u@x"))
+    hub.handle_fields(_dns("10.0.0.1"))
+    return v
+
+
+def test_no_feed_key_means_every_feed():
+    """An older client does not send the key at all, and must keep seeing everything."""
+    v = _only(None)
+    assert v.stats()["matched"] == 2
+    assert v.stats()["feeds"] == ["dns", "fw", "web"]
+
+
+def test_selecting_every_feed_is_the_same_as_selecting_none():
+    v = _only(frozenset({"web", "fw", "dns"}))
+    assert v.stats()["matched"] == 2
+    assert v.stats()["feeds"] == ["dns", "fw", "web"]
+
+
+def test_an_empty_selection_delivers_nothing():
+    """Asking for no feed has to mean no feed, not silently all of them."""
+    v = _only(frozenset())
+    assert v.stats()["matched"] == 0
+    assert v.stats()["feeds"] == []
+
+
+def test_an_unknown_feed_name_delivers_nothing():
+    """Fail closed: a name the server does not know must not open the whole firehose."""
+    v = _only(frozenset({"smtp"}))
+    assert v.stats()["matched"] == 0
+
+
+def test_an_unknown_name_alongside_a_known_one_keeps_the_known_one():
+    v = _only(frozenset({"smtp", "dns"}))
+    assert [r["logtype"] for r in v.snapshot()] == ["dns"]
+
+
+def test_setting_filters_again_without_feeds_restores_every_feed():
+    """Documented protocol: the feeds key absent means all feeds."""
+    hub = Hub()
+    v = hub.register()
+    spec = [FilterSpec(field=FilterField.SRC_IP, value="10.0.0.1")]
+    v.set_filters(spec, feeds=frozenset({"web"}))
+    assert v.stats()["feeds"] == ["web"]
+    v.set_filters(spec)
+    assert v.stats()["feeds"] == ["dns", "fw", "web"]
+    hub.handle_fields(_dns("10.0.0.1"))
+    assert v.stats()["matched"] == 1

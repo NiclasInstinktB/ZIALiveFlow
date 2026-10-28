@@ -17,7 +17,7 @@ from backend.auth.models import (
     normalize_permissions,
     normalize_source,
 )
-from backend.auth.store import get_admin_store
+from backend.auth.store import get_admin_store, is_superadmin
 from backend.auth.throttle import get_throttle
 from backend.auth.tokens import create_session_token
 from backend.config import settings
@@ -131,6 +131,30 @@ def _ensure_may_grant_all(granter: Principal) -> None:
         )
 
 
+def _ensure_may_touch_superadmin(actor: Principal, target: str) -> None:
+    """Only a superadmin may create, change or remove a superadmin account.
+
+    A superadmin always holds every permission, so whoever controls that account
+    controls everything. Without this an account manager holding nothing but
+    ``accounts`` could reset its password and sign in as it, or just delete the
+    break-glass account and take the safety net away. Both are straight escalation
+    and neither is caught by the lockout guard, because the manager keeps their own
+    ``accounts`` permission throughout.
+
+    Note this only recognises a superadmin named in SUPERADMIN_USERS. Someone who is
+    one through SUPERADMIN_AD_GROUP is not visible as such in the session (Principal
+    carries no AD groups), so they manage these accounts through manage.py instead.
+    """
+    if not is_superadmin(target):
+        return
+    if is_superadmin(actor.username):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Only a superadmin may manage a superadmin account.",
+    )
+
+
 def _me(principal: Principal) -> MeResponse:
     return MeResponse(
         username=principal.username,
@@ -161,6 +185,11 @@ async def login(body: LoginRequest, request: Request, response: Response) -> MeR
     wait = throttle.retry_after(tkey)
     if wait > 0:
         log.warning("api.auth.login_throttled", username=body.username, ip=ip, retry_after=wait)
+        # A blocked attempt is still an attempt. Leaving it out of the audit log hides
+        # exactly the interesting part of a brute-force run: the failures before the
+        # block are recorded, everything from the block onwards is not, so the log
+        # ends mid-attack and reads as if the attempt had simply stopped.
+        audit.record(audit.LOGIN_FAIL, user=body.username, ip=ip, detail="throttled")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed attempts. Please wait a moment and try again.",
@@ -274,9 +303,12 @@ async def list_accounts(_: Principal = Depends(require_permission(PERM_ACCOUNTS)
 
 @router.post("/admins")
 async def create_account(
-    body: CreateAccountRequest, _: Principal = Depends(require_permission(PERM_ACCOUNTS))
+    body: CreateAccountRequest, principal: Principal = Depends(require_permission(PERM_ACCOUNTS))
 ) -> dict:
     # A local account with no permissions of its own: it gets them via group membership.
+    # Unless the name is in SUPERADMIN_USERS, in which case it would hold everything the
+    # moment it exists, so only a superadmin gets to create it.
+    _ensure_may_touch_superadmin(principal, body.username)
     try:
         return get_admin_store().create(body.username, body.password, body.display_name)
     except ValueError as e:
@@ -285,8 +317,9 @@ async def create_account(
 
 @router.put("/admins/{username}")
 async def update_account(
-    username: str, body: UpdateAccountRequest, _: Principal = Depends(require_permission(PERM_ACCOUNTS))
+    username: str, body: UpdateAccountRequest, principal: Principal = Depends(require_permission(PERM_ACCOUNTS))
 ) -> dict:
+    _ensure_may_touch_superadmin(principal, username)
     try:
         return get_admin_store().update(
             username,
@@ -304,6 +337,7 @@ async def update_account(
 async def delete_account(username: str, principal: Principal = Depends(require_permission(PERM_ACCOUNTS))) -> dict:
     if username.lower() == principal.username.lower():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own account.")
+    _ensure_may_touch_superadmin(principal, username)
     try:
         get_admin_store().delete(username)
         return {"status": "ok"}
@@ -373,14 +407,21 @@ async def update_group(
     try:
         if body.all_permissions:
             _ensure_may_grant_all(principal)
+        perms = None
+        if body.permissions is not None:
+            perms = normalize_permissions(body.permissions)
+            _ensure_grantable(principal, perms)
+        # ``permissions=None`` leaves the stored list as it is. That matters when the flag
+        # is switched off: otherwise the resolved full list would be frozen in and the
+        # group would stay a full admin in practice.
+
+        # Check the rename BEFORE touching permissions. The other order meant a taken
+        # name left the permission change applied and saved while the caller got a 400,
+        # so the operator was told it failed and it had happened anyway.
+        if body.name is not None:
+            store.ensure_group_renameable(name, body.name)
+
         if body.permissions is not None or body.all_permissions is not None:
-            perms = None
-            if body.permissions is not None:
-                perms = normalize_permissions(body.permissions)
-                _ensure_grantable(principal, perms)
-            # ``permissions=None`` leaves the stored list as it is. That matters when
-            # the flag is switched off: otherwise the resolved full list would be frozen
-            # in and the group would stay a full admin in practice.
             out = store.set_group_permissions(name, perms, all_permissions=body.all_permissions)
         if body.name is not None:
             # Renaming changes no permissions, only who may manage the group (PERM_ACCOUNTS).

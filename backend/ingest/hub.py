@@ -131,6 +131,13 @@ class View:
         self._join = join
         self._feeds = None if feeds is None or feeds >= set(FEED_COLUMNS) else frozenset(feeds)
         self._compiled = parser.compile_groups(self._groups)
+        if self._join is FilterOp.AND and len(self._compiled) < len(self._groups):
+            # Same reasoning as inside an AND group (see parser.compile_groups): a group
+            # discarded by the server protection would leave the AND join matching MORE
+            # broadly than was asked for. Better no match at all than silently too many.
+            log.warning("filter.and_join_incomplete",
+                        kept=len(self._compiled), wanted=len(self._groups))
+            self._compiled = []
         self._buffer.clear()
         self._matched = 0
         self._dropped_slow = 0

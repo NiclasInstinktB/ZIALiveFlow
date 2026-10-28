@@ -3,6 +3,44 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.47.0
+
+Audit of the whole codebase, 36 fixes. Two behaviours changed on purpose.
+
+Critical
+- An unreadable admins.json wiped every account in memory, and the next write persisted the wipe.
+- Revoking clear text mid-stream masked the fields but left the user filter running, so every masked record still belonged to one named person.
+- A first start could create the account, fail on the group and leave the install locked out for good.
+- A config file that parsed to anything other than an object crashed startup.
+
+Security
+- The login brake keyed on X-Forwarded-For, so rotating the header defeated it and decided what the audit log recorded.
+- CORS set to * still sent credentials.
+- The directory lookup did not escape the identity.
+- An account manager could disable, delete or repassword a superadmin account.
+- A directory session could renew itself past a full revocation.
+- A throttled login was not audited.
+
+Data loss
+- Saving one config field wrote all of them, which froze the env file from then on.
+- A stat based signature let a CLI revocation be clobbered by the running service.
+- A JWT rotation overwrote the env fallback password with an empty string.
+- A failed prefs load armed the autosave and overwrote the stored prefs with defaults.
+- Several rejected writes left memory and disk disagreeing.
+
+Correctness
+- A rejected filter group silently widened an AND join, so you saw traffic you had excluded.
+- The ingest allowlist refused IPv4 feeds on a dual stack listener.
+- An overlong line delivered its tail as a line of its own.
+- A timestamp of non decimal digits dropped the whole record instead of arriving unreadable.
+- One binary WebSocket frame wedged the live stream for good.
+
+Behaviour changes
+- A directory session now lives at most one full lifetime counted from sign in, then requires a new sign-in. Local sessions are unchanged.
+- The two settings panels save and reset only their own fields.
+
+428 tests, up from 234.
+
 ## v0.46.1
 
 Two fixes in how runtime settings are persisted.

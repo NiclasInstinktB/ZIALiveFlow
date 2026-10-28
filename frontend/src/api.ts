@@ -13,6 +13,16 @@ let unauthorizedHandler: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: (() => void) | null) {
   unauthorizedHandler = fn;
 }
+
+/** Report a dead session that was NOT discovered through an HTTP 401.
+ *
+ * The live stream is the case: someone watching it makes no requests at all, so the
+ * session can expire without anything noticing. The WebSocket close tells us, and this
+ * is how that gets into the same sign-out path instead of firing a throwaway request
+ * just to collect a 401. */
+export function notifyUnauthorized() {
+  unauthorizedHandler?.();
+}
 const SILENT_401 = ["/api/auth/me", "/api/auth/login"];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -68,7 +78,7 @@ export const api = {
   savePrefs: (prefs: Record<string, unknown>) =>
     request<Record<string, unknown>>("/api/prefs", { method: "PUT", body: JSON.stringify({ prefs }) }),
 
-  // Query-Chips: globale (admin-verwaltet) laden; persoenliche liegen in den Prefs.
+  // Query chips: the global ones (admin managed). Personal chips live in the prefs.
   getChips: () => request<{ global: QueryChip[]; can_edit_global: boolean }>("/api/chips"),
   saveGlobalChips: (chips: QueryChip[]) =>
     request<{ chips: QueryChip[] }>("/api/chips/global", { method: "PUT", body: JSON.stringify({ chips }) }),
@@ -77,7 +87,7 @@ export const api = {
   // suggestions and the chip preview.
   samples: (limit = 2000) => request<{ records: FlowRecord[] }>(`/api/stream/samples?limit=${limit}`),
 
-  // Konten-Verwaltung (Recht "accounts"): Konten (ohne eigene Rechte) + Gruppen (Rechte
+  // Account management (permission "accounts"): accounts (which carry no permissions of
   // + Mitglieder) + AD-Verzeichnis-Suche fuer den Mitglieder-Picker.
   admins: {
     list: () => request<AdminUser[]>("/api/admins"),
@@ -93,7 +103,7 @@ export const api = {
     remove: (username: string) =>
       request<{ status: string }>(`/api/admins/${encodeURIComponent(username)}`, { method: "DELETE" }),
 
-    // Gruppen: Rechte + Mitglieder (lokale Konten, AD-User, AD-Gruppen).
+    // Groups: permissions plus members (local accounts, AD users, AD groups).
     groups: {
       list: () => request<Group[]>("/api/admins/groups"),
       create: (name: string, permissions: string[] = [], all_permissions = false) =>

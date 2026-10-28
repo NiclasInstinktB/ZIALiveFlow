@@ -305,3 +305,59 @@ def test_feed_state_reports_silence(monkeypatch):
     # Threshold of 0 seconds: the line that just arrived already counts as too old.
     monkeypatch.setattr(settings, "feed_stale_after_seconds", 0)
     assert stream_routes._feed_state()["stale"] is True
+
+
+# ── Losing the clear-text permission while the stream runs ─────────
+def test_ws_drops_the_user_filter_when_clear_text_is_revoked(env, monkeypatch):
+    """Masking a running stream is only half the job.
+
+    The stream re-checks the session every few seconds and starts masking when the
+    clear-text permission goes away. A ``user`` filter set while the permission was
+    still there keeps running though, and that is exactly the oracle the filter block
+    exists to prevent: the records arrive masked, but every one of them belongs to the
+    named person, and the source IP, device and target are not masked at all.
+    """
+    from backend.api import stream_routes
+
+    monkeypatch.setattr(stream_routes, "_STATS_INTERVAL_S", 0.05)
+    store = get_admin_store()
+    store.create("both", "password1")
+    store.create_group("Both", {PERM_LOGS, PERM_LOGS_OBF},
+                       members=[{"type": "local", "ref": "both"}])
+
+    with env("both").websocket_connect("/api/stream/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "set_filters",
+                      "filters": [{"field": "user", "value": "max.muster@example.com"}]})
+        assert [f["field"] for f in ws.receive_json()["stats"]["filters"]] == ["user"]
+
+        # Clear text revoked: the account keeps only the anonymized permission.
+        store.set_group_permissions("Both", {PERM_LOGS_OBF})
+
+        filters = None
+        for _ in range(60):
+            msg = ws.receive_json()
+            filters = msg["stats"]["filters"]
+            if not filters:
+                break
+        assert filters == [], f"the user filter is still running while masked: {filters}"
+
+
+def test_ws_closes_when_every_log_permission_is_revoked(env, monkeypatch):
+    """Losing clear text masks the stream; losing both permissions has to end it."""
+    from starlette.websockets import WebSocketDisconnect
+
+    from backend.api import stream_routes
+
+    monkeypatch.setattr(stream_routes, "_STATS_INTERVAL_S", 0.05)
+    store = get_admin_store()
+    store.create("fleeting", "password1")
+    store.create_group("Fleeting", {PERM_LOGS_OBF},
+                       members=[{"type": "local", "ref": "fleeting"}])
+
+    with pytest.raises(WebSocketDisconnect):
+        with env("fleeting").websocket_connect("/api/stream/ws") as ws:
+            ws.receive_json()
+            store.set_group_permissions("Fleeting", {PERM_OVERVIEW})
+            for _ in range(60):
+                ws.receive_json()

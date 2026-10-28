@@ -310,3 +310,116 @@ def test_feed_restriction():
     assert parser.wants(_dns("10.0.0.1"), groups, feeds=None)
     assert not parser.wants(_dns("10.0.0.1"), groups, feeds=frozenset({"web", "fw"}))
     assert parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b"), groups, feeds=frozenset({"web", "fw"}))
+
+
+# ── The documented asymmetry (README, "Wildcards behave differently") ──
+def test_without_a_wildcard_the_whole_value_must_match():
+    """The README's own example: Zscaler puts location and sub-location in one field."""
+    specs = _c(FilterSpec(field=FilterField.LOCATION, value="Site-HQ"))
+    assert parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b", location="Site-HQ"), specs)
+    assert not parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b", location="Site-HQ->other"), specs)
+    assert not parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b", location="Other-Site-HQ"), specs)
+    # With the wildcard it becomes the glob people expect.
+    glob = _c(FilterSpec(field=FilterField.LOCATION, value="Site-HQ*"))
+    assert parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b", location="Site-HQ->other"), glob)
+
+
+def test_an_ip_without_a_wildcard_is_the_whole_value():
+    specs = _c(_src("10.20.30.4"))
+    assert parser.wants(_web("10.20.30.4", "1.1.1.1", "a@b"), specs)
+    assert not parser.wants(_web("10.20.30.40", "1.1.1.1", "a@b"), specs)
+
+
+def test_a_user_filter_is_not_a_substring_match():
+    specs = _c(FilterSpec(field=FilterField.USER, value="alice@corp.example"))
+    assert not parser.wants(_web("10.0.0.1", "1.1.1.1", "alice@corp.example.org"), specs)
+    assert not parser.wants(_web("10.0.0.1", "1.1.1.1", "x-alice@corp.example"), specs)
+
+
+# ── Server protection: the boundaries ─────────────────────────────
+def test_ipv4_cidr_boundary():
+    assert len(_c(_src("10.20.30.0/23"))) == 1     # the widest that is allowed
+    assert _c(_src("10.20.30.0/22")) == []         # one bit wider: discarded
+    assert _c(_src("10.20.30.0/0")) == []
+
+
+def test_ipv6_cidr_boundary():
+    assert len(_c(_src("2001:db8::/64"))) == 1
+    assert _c(_src("2001:db8::/63")) == []
+    assert len(_c(_src("2001:db8::1/128"))) == 1
+
+
+def test_wildcard_budget_boundary():
+    assert len(_c(FilterSpec(field=FilterField.LOCATION, value="a*b*c*d"))) == 1   # 3 stars
+    assert _c(FilterSpec(field=FilterField.LOCATION, value="a*b*c*d*e")) == []     # 4 stars
+
+
+def test_an_or_group_keeps_what_survived():
+    """Dropping a condition out of an OR group narrows it, which is the safe direction."""
+    groups = parser.compile_groups([
+        FilterGroup(op=FilterOp.OR, items=[_src("10.0.0.0/8"), _src("10.20.30.1")]),
+    ])
+    assert parser.wants(_web("10.20.30.1", "1.1.1.1", "a@b"), groups)
+    assert not parser.wants(_web("10.1.2.3", "1.1.1.1", "a@b"), groups)
+
+
+# ── A broken line is dropped, never raised on ─────────────────────
+def test_a_short_or_malformed_line_is_dropped_not_raised():
+    """One unusable line must never take the feed connection with it."""
+    groups = parser.compile_groups([
+        FilterGroup(op=FilterOp.OR, items=[
+            _src("10.0.0.0/24"),
+            FilterSpec(field=FilterField.USER, value="a*"),
+            FilterSpec(field=FilterField.LOCATION, value="HQ"),
+        ]),
+    ])
+    for fields in ([], [""], ["web"], ["web", "10.0.0.1"], ["web", "10.0.0.1", "1.1.1.1"],
+                   ["web", "", "", "", ""], ["\t"], ["smtp", "x", "y", "z", "w"]):
+        assert parser.wants(fields, groups) in (True, False)   # must not raise
+        parser.parse(fields, 1, 0.0)                           # must not raise either
+
+
+def test_a_cidr_filter_against_a_value_that_is_not_an_ip():
+    """The column can hold anything if the feed layout shifts; that is a miss, not a crash."""
+    groups = _c(_src("10.0.0.0/24"))
+    assert not parser.wants(_web("not-an-ip", "1.1.1.1", "a@b"), groups)
+    assert not parser.wants(_web("", "1.1.1.1", "a@b"), groups)
+    assert not parser.wants(_web("10.0.0.1 ", "1.1.1.1", "a@b"), groups)
+
+
+def test_a_malformed_cidr_never_matches_anything():
+    """An unparseable prefix falls back to an exact string, which no IP can equal."""
+    groups = _c(_src("10.20.30.0/33"))
+    assert len(groups) == 1
+    assert not parser.wants(_web("10.20.30.1", "1.1.1.1", "a@b"), groups)
+
+
+def test_an_empty_filter_value_drops_out():
+    """Otherwise an empty value would compile to a matcher hitting every empty field."""
+    assert parser.compile_groups([
+        FilterGroup(op=FilterOp.OR, items=[FilterSpec(field=FilterField.USER, value="  ")]),
+    ]) == []
+    groups = parser.compile_groups([
+        FilterGroup(op=FilterOp.OR, items=[
+            FilterSpec(field=FilterField.USER, value=""),
+            _src("10.0.0.1"),
+        ]),
+    ])
+    assert len(groups[0][1]) == 1
+    assert not parser.wants(_web("10.0.0.9", "1.1.1.1", ""), groups)
+
+
+# ── Case ───────────────────────────────────────────────────────────
+def test_the_type_tag_is_matched_case_insensitively():
+    line = _web("10.0.0.1", "1.1.1.1", "a@b")
+    line[0] = "WEB"
+    groups = _c(_src("10.0.0.1"))
+    assert parser.wants(line, groups, feeds=frozenset({"web"}))
+    assert parser.parse(line, 1, 0.0).logtype == "web"
+
+
+def test_a_wildcard_on_user_and_location_ignores_case():
+    user = _c(FilterSpec(field=FilterField.USER, value="ALICE@*"))
+    loc = _c(FilterSpec(field=FilterField.LOCATION, value="site-*"))
+    assert parser.wants(_web("10.0.0.1", "1.1.1.1", "Alice@Corp.Example"), user)
+    assert parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b", location="Site-HQ"), loc)

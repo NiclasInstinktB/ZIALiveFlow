@@ -162,8 +162,14 @@ export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
 
   // ── Load ───────────────────────────────────────────────────────
   useEffect(() => {
+    // A prefs read that FAILED must not look like "nothing stored": the defaults below
+    // would be written straight back over the stored blob by the autosave.
+    let prefsOk = true;
     Promise.all([
-      api.getPrefs().catch(() => ({} as Record<string, unknown>)),
+      api.getPrefs().catch(() => {
+        prefsOk = false;
+        return {} as Record<string, unknown>;
+      }),
       api.getChips().catch(() => ({ global: [] as QueryChip[], can_edit_global: false })),
     ])
       .then(([p, ch]) => {
@@ -182,7 +188,7 @@ export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
         setChipView(mergeChipView(p?.chipView, [...glob, ...personal]));
       })
       .finally(() => {
-        loadedRef.current = true;
+        loadedRef.current = prefsOk;
       });
   }, []);
 
@@ -195,7 +201,9 @@ export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
       api
         .savePrefs(payload)
         .then(() => {
-          pending.current = null;
+          // Only clear when nothing newer is waiting, otherwise a change made while this
+          // request was in flight is dropped by the flush below.
+          if (pending.current === payload) pending.current = null;
           setSaved(true);
           window.setTimeout(() => setSaved(false), 1200);
         })
@@ -246,11 +254,14 @@ export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
   // ── Chip CRUD ──────────────────────────────────────────────────
   function saveChip(chip: QueryChip, scope: ChipScope) {
     if (scope === "global") {
+      const before = globalChips;
       const next = globalChips.some((c) => c.id === chip.id)
         ? globalChips.map((c) => (c.id === chip.id ? chip : c))
         : [...globalChips, chip];
       setGlobalChips(next);
-      api.saveGlobalChips(next).catch(() => {});
+      // Global chips live on the server, not in the prefs. If the write is refused the
+      // list has to go back, otherwise it shows a chip nobody else has.
+      api.saveGlobalChips(next).catch(() => setGlobalChips(before));
     } else {
       setPersonalChips(
         personalChips.some((c) => c.id === chip.id)
@@ -263,9 +274,10 @@ export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
   function deleteChip(chip: ScopedChip) {
     if (chip.scope === "global") {
       if (!canEditGlobal) return;
+      const before = globalChips;
       const next = globalChips.filter((c) => c.id !== chip.id);
       setGlobalChips(next);
-      api.saveGlobalChips(next).catch(() => {});
+      api.saveGlobalChips(next).catch(() => setGlobalChips(before));
     } else {
       setPersonalChips(personalChips.filter((c) => c.id !== chip.id));
     }

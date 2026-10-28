@@ -210,7 +210,8 @@
       "badCidr": "Invalid CIDR (e.g. 10.20.30.0/24)",
       "netTooLarge": "Network too large, smallest prefix is /{{prefix}} (e.g. /23, /24)",
       "badPattern": "Invalid pattern",
-      "badIp": "Not a valid IP address"
+      "badIp": "Not a valid IP address",
+      "filterDenied": "This filter is not available in the anonymised view and was not applied."
     },
     "opAnd": "AND",
     "opOr": "OR",

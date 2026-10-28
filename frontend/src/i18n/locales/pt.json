@@ -210,7 +210,8 @@
       "badCidr": "CIDR inválido (ex.: 10.20.30.0/24)",
       "netTooLarge": "Rede grande demais, o menor prefixo é /{{prefix}} (ex.: /23, /24)",
       "badPattern": "Padrão inválido",
-      "badIp": "Endereço IP inválido"
+      "badIp": "Endereço IP inválido",
+      "filterDenied": "Este filtro não está disponível na visualização anonimizada e não foi aplicado."
     },
     "opAnd": "E",
     "opOr": "OU",

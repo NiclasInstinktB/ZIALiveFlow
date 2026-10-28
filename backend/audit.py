@@ -33,10 +33,23 @@ SEARCH = "search"
 
 
 def client_ip(headers: Mapping[str, str], fallback: str = "") -> str:
-    """Client IP from X-Forwarded-For (nginx), or the fallback (the direct peer IP)."""
-    xff = headers.get("x-forwarded-for") or headers.get("X-Forwarded-For")
-    if xff:
-        return xff.split(",")[0].strip()[:64]
+    """Client IP: the peer address the server itself observed.
+
+    ``X-Forwarded-For`` is deliberately NOT read here. It is an ordinary request header
+    that every client can set freely, so an entry built from it proves nothing, and the
+    login brake keyed on it (``api/auth_routes``) could be stepped around by sending a
+    different value on every attempt.
+
+    Behind a reverse proxy the real client address still arrives: the server is started
+    with ``serve.py --proxy-headers --forwarded-allow-ips <proxy>`` (see
+    ``deploy/zscaler-admin-ui.service``), and uvicorn then resolves the forwarded header
+    into the peer address, but only for connections coming from a proxy that was
+    explicitly trusted. That trust decision belongs there, not in this function, which
+    cannot tell a proxy from an arbitrary caller.
+
+    ``headers`` stays in the signature: callers pass the request headers, and the
+    parameter documents at the call site that the header was considered and rejected.
+    """
     return (fallback or "")[:64]
 
 

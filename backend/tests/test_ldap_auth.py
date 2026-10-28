@@ -140,3 +140,56 @@ def test_principal_is_ad_flag():
     assert Principal("u", "U", frozenset({"logs"}), SOURCE_AD).is_ad is True
     assert Principal("u", "U", frozenset({"logs"}), SOURCE_LOCAL).is_ad is False
     assert Principal("u", "U").is_ad is False  # the default is local
+
+
+# ── Filter building: the identity must not change the shape of the query ──
+class _RecordingConn:
+    """Stands in for a bound ldap3 connection and just records the filter."""
+
+    def __init__(self) -> None:
+        self.filters: list[str] = []
+        self.entries: list = []
+
+    def search(self, search_base=None, search_filter="", attributes=None, **kw) -> None:
+        self.filters.append(search_filter)
+
+
+def test_principal_lookup_escapes_the_identity(monkeypatch):
+    """A sign-in name is a VALUE in the filter, never part of its structure.
+
+    ``_ldap_escape`` exists in this module for exactly that reason, and the member picker
+    uses it. The lookup behind the sign-in and the SSO group load must use it too:
+    otherwise a name carrying brackets or a wildcard rewrites the query, and the groups
+    of whichever account the rewritten query happens to return are the ones that decide
+    the session's permissions.
+    """
+    from backend.auth.ldap_client import _search_principal
+
+    monkeypatch.setattr(settings, "ldap_domain", "example.com")
+    monkeypatch.setattr(settings, "ldap_base_dn", "DC=example,DC=com")
+    monkeypatch.setattr(settings, "ldap_group_attr", "memberOf")
+
+    conn = _RecordingConn()
+    _search_principal(conn, "bob)(objectClass=*")
+    flt = conn.filters[0]
+
+    # Exactly the three clauses the function builds, and no fourth one smuggled in.
+    assert flt.count("(") == flt.count(")")
+    assert flt.count("objectClass=user") == 1
+    assert "objectClass=*" not in flt
+    # The wildcard is searched for literally rather than matching every account.
+    assert "=*" not in flt.replace("objectClass=*", "")
+
+
+def test_principal_lookup_leaves_an_ordinary_name_alone(monkeypatch):
+    from backend.auth.ldap_client import _search_principal
+
+    monkeypatch.setattr(settings, "ldap_domain", "example.com")
+    monkeypatch.setattr(settings, "ldap_base_dn", "DC=example,DC=com")
+    monkeypatch.setattr(settings, "ldap_group_attr", "memberOf")
+
+    conn = _RecordingConn()
+    _search_principal(conn, "max.example@example.com")
+    flt = conn.filters[0]
+    assert "(userPrincipalName=max.example@example.com)" in flt
+    assert "(sAMAccountName=max.example)" in flt

@@ -210,7 +210,8 @@
       "badCidr": "CIDR 无效（例如 10.20.30.0/24）",
       "netTooLarge": "网段过大，最小前缀为 /{{prefix}}（例如 /23、/24）",
       "badPattern": "模式无效",
-      "badIp": "不是有效的 IP 地址"
+      "badIp": "不是有效的 IP 地址",
+      "filterDenied": "此过滤条件在匿名视图中不可用，因此未生效。"
     },
     "opAnd": "AND",
     "opOr": "OR",

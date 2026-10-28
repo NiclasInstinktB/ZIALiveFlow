@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import pathlib
 import sys
 
 
@@ -78,7 +79,10 @@ def main() -> int:
     host = args.host or os.getenv("APP_HOST") or settings.app_host
     port = args.port or int(os.getenv("APP_PORT") or settings.app_port)
 
-    if not os.path.exists(os.path.join("frontend", "dist", "index.html")):
+    # Resolve against this file, not the working directory. Started from anywhere else,
+    # a relative path made the check warn that the UI was missing while the app went on
+    # to serve it correctly.
+    if not (pathlib.Path(__file__).resolve().parent / "frontend" / "dist" / "index.html").exists():
         print(
             "Warning: frontend/dist is missing, so only the API will respond.\n"
             "Build the UI first:  cd frontend && npm install && npm run build",

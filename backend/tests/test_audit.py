@@ -65,3 +65,25 @@ def test_stats(tmp_path, monkeypatch):
     audit.record(audit.SEARCH, user="a", detail="x=1")
     s = audit.stats()
     assert s["entries"] == 2 and s["files"] == 1 and s["retention_days"] == 30
+
+
+# ── Which address ends up in the entry ─────────────────────────────
+# The peer address is the one the server observed. ``X-Forwarded-For`` is a plain
+# request header that any client can set, so an entry built from it is worthless as
+# evidence, and the login brake keyed on it (see ``api/auth_routes``) can be stepped
+# around by sending a different value on every attempt.
+def test_client_ip_uses_the_peer_address():
+    assert audit.client_ip({}, "10.0.0.7") == "10.0.0.7"
+
+
+def test_client_ip_ignores_a_spoofed_forwarded_for():
+    headers = {"x-forwarded-for": "203.0.113.9, 198.51.100.1"}
+    assert audit.client_ip(headers, "10.0.0.7") == "10.0.0.7"
+
+
+def test_client_ip_without_a_peer_is_empty():
+    assert audit.client_ip({"X-Forwarded-For": "203.0.113.9"}, "") == ""
+
+
+def test_client_ip_is_length_capped():
+    assert len(audit.client_ip({}, "9" * 300)) == 64

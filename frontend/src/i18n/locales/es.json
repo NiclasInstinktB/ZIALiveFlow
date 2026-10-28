@@ -210,7 +210,8 @@
       "badCidr": "CIDR no válido (p. ej. 10.20.30.0/24)",
       "netTooLarge": "Red demasiado grande, el prefijo mínimo es /{{prefix}} (p. ej. /23, /24)",
       "badPattern": "Patrón no válido",
-      "badIp": "No es una dirección IP válida"
+      "badIp": "No es una dirección IP válida",
+      "filterDenied": "Este filtro no está disponible en la vista anonimizada y no se ha aplicado."
     },
     "opAnd": "Y",
     "opOr": "O",

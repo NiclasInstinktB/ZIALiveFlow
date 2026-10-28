@@ -71,10 +71,15 @@ def _load() -> list[dict]:
     try:
         data = json.loads(_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        data = None
+    # A damaged file must cost the chip bar, not the whole response: every reader of the
+    # live view asks for the chips, so raising here would be an error page for everyone.
+    raw = data.get("chips") if isinstance(data, dict) else None
+    if not isinstance(raw, list):
         log.warning("chips.load_failed", path=str(_PATH))
         return []
     out: list[dict] = []
-    for i, c in enumerate(data.get("chips", [])):
+    for i, c in enumerate(raw):
         s = _sanitize(c, i) if isinstance(c, dict) else None
         if s:
             out.append(s)
@@ -118,8 +123,14 @@ def replace_global(chips: list) -> list[dict]:
         s = _sanitize(c, i)
         if not s:
             continue
+        # Keep renaming until the id is free: the suffixed name can itself already be
+        # taken, and ids key the per-account show/hide and order prefs, so a duplicate
+        # would make two chips impossible to tell apart there.
         if s["id"] in seen:
-            s["id"] = f"{s['id']}_{i}"
+            base, n = s["id"], i
+            while s["id"] in seen:
+                s["id"] = f"{base}_{n}"
+                n += 1
         seen.add(s["id"])
         cleaned.append(s)
     with _lock:

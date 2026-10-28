@@ -98,3 +98,71 @@ def test_env_fallback_when_no_file(cfg, monkeypatch):
 
 def test_test_connection_without_issuer(cfg):
     assert oidc_config.test_connection() == {"ok": False, "detail": "Issuer URL is missing."}
+
+
+# ── Only what the operator actually changed reaches the file ───────
+# The SSO form posts the whole draft, so every field arrives on every save, including
+# the ones that are still on their .env value and were never touched.
+def test_save_stores_only_the_changed_field(cfg, monkeypatch):
+    monkeypatch.setattr(settings, "oidc_issuer", "https://env-issuer.example.com")
+    oidc_config.update({
+        "oidc_enabled": False,
+        "oidc_issuer": "https://env-issuer.example.com",
+        "oidc_client_id": "",
+        "oidc_redirect_url": "https://app.example.com/callback",  # the only edit
+        "oidc_scopes": "openid profile email",
+    })
+    assert json.loads(cfg.read_text(encoding="utf-8")) == {
+        "oidc_redirect_url": "https://app.example.com/callback"
+    }
+
+
+def test_save_without_a_single_change_writes_nothing(cfg):
+    oidc_config.update({
+        "oidc_enabled": False, "oidc_issuer": "", "oidc_client_id": "",
+        "oidc_redirect_url": "", "oidc_scopes": "openid profile email",
+    })
+    assert not cfg.exists()
+
+
+def test_env_value_stays_changeable_after_a_save(cfg, monkeypatch):
+    """An untouched field must not be frozen into the file by an unrelated save."""
+    monkeypatch.setattr(settings, "oidc_issuer", "https://env-issuer.example.com")
+    oidc_config.update({
+        "oidc_issuer": "https://env-issuer.example.com", "oidc_client_id": "cid",
+    })
+    assert "oidc_issuer" not in json.loads(cfg.read_text(encoding="utf-8"))
+
+    # The operator edits OIDC_ISSUER in the env file and restarts.
+    monkeypatch.setattr(settings, "oidc_issuer", "https://new-issuer.example.com")
+    oidc_config.load_and_apply()
+    assert settings.oidc_issuer == "https://new-issuer.example.com"
+
+
+# ── A damaged file must not stop the app from starting ─────────────
+def test_load_survives_a_file_that_is_not_an_object(cfg):
+    cfg.write_text("[1, 2, 3]", encoding="utf-8")
+    oidc_config.load_and_apply()  # must not raise
+
+
+def test_update_survives_a_file_that_is_not_an_object(cfg):
+    cfg.write_text('"junk"', encoding="utf-8")
+    oidc_config.update({"oidc_client_id": "cid"})
+    assert json.loads(cfg.read_text(encoding="utf-8"))["oidc_client_id"] == "cid"
+
+
+def test_load_survives_a_non_string_secret(cfg):
+    cfg.write_text(json.dumps({"oidc_client_secret_enc": 12345}), encoding="utf-8")
+    oidc_config.load_and_apply()  # must not raise
+
+
+# ── A secret that cannot be decrypted must not wipe the .env fallback ──
+def test_undecryptable_secret_keeps_the_env_secret(cfg, monkeypatch):
+    """After a JWT_SECRET rotation the stored secret is lost, but .env is the fallback."""
+    oidc_config.update({"oidc_client_secret": "stored-secret"})
+    monkeypatch.setattr(settings, "jwt_secret", "a-completely-different-secret-9876")
+    crypto.reset_cipher()
+    monkeypatch.setattr(settings, "oidc_client_secret", "env-secret")
+    oidc_config.load_and_apply()
+    assert settings.oidc_client_secret == "env-secret"
+    assert "oidc_client_secret" not in oidc_config.current_public()

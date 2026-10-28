@@ -100,7 +100,10 @@ def to_epoch(raw: str) -> float | None:
         return None
 
     # 1) Pure digits = epoch (firewall). Absolute, so the zone is irrelevant and no memo needed.
-    if s.isdigit():
+    # isdecimal(), not isdigit(): isdigit() is also true for characters such as the
+    # superscript two, which int() and float() then refuse with a ValueError. isdecimal()
+    # is exactly the set those two accept, so a shifted column cannot blow up the line.
+    if s.isdecimal():
         if len(s) >= _MS_DIGITS:
             return int(s) / 1000.0
         if len(s) >= _MIN_EPOCH_DIGITS:

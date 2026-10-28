@@ -36,6 +36,12 @@ def _peer_allowed(peer: object) -> bool:
         ip = ipaddress.ip_address(host)
     except ValueError:
         return False
+    # A dual-stack listener (INGEST_BIND_HOST="::") reports an IPv4 client as
+    # ::ffff:10.0.0.5. Compare the address it really came from, otherwise an IPv4
+    # allowlist entry refuses the feed and the rejection log looks plainly wrong.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
     return any(ip in net for net in nets)
 
 # Line limit for the StreamReader (URLs can be long). 512 KB is generous.
@@ -129,6 +135,9 @@ async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
     hub = get_hub()
     handle = hub.handle_fields  # a local reference saves an attribute lookup in the hot loop
     buf = b""
+    # True while the tail of an over-long line is still arriving: it belongs to a line
+    # that has already been discarded, so it must not be handed on as a line of its own.
+    discarding = False
     # Read by the watchdog; in the read loop keeping it current costs one assignment
     # per chunk.
     state = {"last_data": time.monotonic()}
@@ -145,8 +154,14 @@ async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 if len(buf) > _LINE_LIMIT:
                     log.warning("ingest.line_too_long", feed=feed, peer=str(peer))
                     buf = b""
+                    discarding = True
                 continue
             *lines, buf = buf.split(b"\n")  # the last (partial) remainder stays in the buffer
+            if discarding:
+                # Everything up to the first separator is the rest of the line that was
+                # dropped above, not a line anyone sent.
+                lines = lines[1:]
+                discarding = False
             for raw in lines:
                 if not raw:
                     continue

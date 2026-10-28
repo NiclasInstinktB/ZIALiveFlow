@@ -213,7 +213,8 @@
       "badCidr": "CIDR invalide (p. ex. 10.20.30.0/24)",
       "netTooLarge": "Réseau trop grand, le plus petit préfixe est /{{prefix}} (p. ex. /23, /24)",
       "badPattern": "Motif invalide",
-      "badIp": "Adresse IP non valide"
+      "badIp": "Adresse IP non valide",
+      "filterDenied": "Ce filtre n'est pas disponible dans l'affichage anonymisé et n'a pas été appliqué."
     },
     "opAnd": "ET",
     "opOr": "OU",

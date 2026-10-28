@@ -288,6 +288,30 @@ def read_only_view() -> dict:
 ENV_FILE_LABEL = os.getenv("APP_ENV_FILE", str(PROJECT_ROOT / ".env")) or "(none)"
 
 
+# What the restart-tier settings were when this process bound its sockets. Everything in
+# the restart tier is still assigned to ``settings`` the moment it is saved, so comparing
+# against the live object tells you nothing. Without this snapshot the "needs a restart"
+# notice only existed in the response to the save that caused it: change something else
+# afterwards, or just reload the page, and the outstanding restart was invisible.
+_BOOT_RESTART_VALUES: dict[str, Any] = {}
+
+
+def mark_boot_state() -> None:
+    """Record the restart-tier values this process actually started with.
+
+    Called once from the lifespan, after load_and_apply and before anything binds.
+    """
+    global _BOOT_RESTART_VALUES
+    _BOOT_RESTART_VALUES = {n: getattr(settings, n) for n in SPECS if SPECS[n].tier == "restart"}
+
+
+def restart_pending() -> list[str]:
+    """Restart-tier settings whose stored value no longer matches the running process."""
+    if not _BOOT_RESTART_VALUES:
+        return []
+    return sorted(n for n, was in _BOOT_RESTART_VALUES.items() if getattr(settings, n) != was)
+
+
 # ── Persistence ────────────────────────────────────────────────────
 
 

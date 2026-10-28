@@ -48,13 +48,22 @@ def _clamp_int(name: str, value) -> int:
 
 
 def _read_raw() -> dict:
+    """The stored config as a dict. Missing, unreadable or not an object gives {}.
+
+    A damaged file must not stop the app from starting: ``load_and_apply`` runs in the
+    startup path, so anything that is not a JSON object has to be treated as "nothing
+    stored" rather than raising on the first ``.get``.
+    """
     if not _PATH.exists():
         return {}
     try:
-        return json.loads(_PATH.read_text(encoding="utf-8"))
+        data = json.loads(_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
         log.warning("ldap.config.read_failed", path=str(_PATH))
         return {}
+    return data
 
 
 def _save(store: dict) -> None:
@@ -103,9 +112,19 @@ def load_and_apply() -> None:
             except (TypeError, ValueError):
                 continue
     enc = data.get(_SECRET_STORE_KEY)
-    if enc:
-        settings.ldap_bind_password = crypto.decrypt(enc)
-        applied += 1
+    if isinstance(enc, str) and enc:
+        password = crypto.decrypt(enc)
+        if password:
+            settings.ldap_bind_password = password
+            applied += 1
+        else:
+            # Undecryptable, typically because JWT_SECRET was rotated without
+            # APP_ENCRYPTION_KEY being set. Leave whatever .env provides in place: an
+            # empty password here would also take the working fallback away.
+            log.warning(
+                "ldap.config.secret_unreadable",
+                hint="Bind password could not be decrypted; re-enter it in the admin backend.",
+            )
     if applied:
         log.info("ldap.config.loaded", fields=applied, configured=settings.ldap_configured)
 
@@ -131,37 +150,48 @@ def update(changes: dict) -> dict:
 
     Password semantics (``ldap_bind_password``): key NOT present means unchanged; an empty
     string clears it; a non-empty string sets a new one (stored encrypted).
-    """
-    store = _read_raw()
 
+    The whole batch is validated before anything is applied. Validating and assigning in
+    one pass would leave the earlier fields of a rejected batch live in ``settings`` while
+    nothing reaches the file, so memory and file would disagree until the next restart.
+    """
+    coerced: dict = {}
     for name in _STR_FIELDS:
         if changes.get(name) is not None:
-            val = str(changes[name]).strip()
-            setattr(settings, name, val)
-            store[name] = val
+            coerced[name] = str(changes[name]).strip()
 
     for name in _BOOL_FIELDS:
         if changes.get(name) is not None:
-            setattr(settings, name, bool(changes[name]))
-            store[name] = bool(changes[name])
+            coerced[name] = bool(changes[name])
 
     for name in _INT_FIELDS:
         if changes.get(name) is not None:
             try:
-                v = _clamp_int(name, changes[name])
+                coerced[name] = _clamp_int(name, changes[name])  # raises, nothing applied yet
             except (TypeError, ValueError):
                 raise ValueError(f"Invalid value for {name}.")
-            setattr(settings, name, v)
-            store[name] = v
 
-    if _SECRET_FIELD in changes and changes[_SECRET_FIELD] is not None:
-        pw = str(changes[_SECRET_FIELD])
-        if pw == "":
+    # Only fields that really differ are stored. The admin form posts the whole draft on
+    # every save, so storing all of it would bake the values that still come from .env
+    # into the file on the first save, after which editing .env would silently stop
+    # having any effect.
+    applied = {n: v for n, v in coerced.items() if getattr(settings, n) != v}
+    secret = str(changes[_SECRET_FIELD]) if changes.get(_SECRET_FIELD) is not None else None
+    if not applied and secret is None:
+        return current_public()
+
+    store = _read_raw()
+    for name, value in applied.items():
+        setattr(settings, name, value)
+        store[name] = value
+
+    if secret is not None:
+        if secret == "":
             settings.ldap_bind_password = ""
             store.pop(_SECRET_STORE_KEY, None)
         else:
-            settings.ldap_bind_password = pw
-            store[_SECRET_STORE_KEY] = crypto.encrypt(pw)
+            settings.ldap_bind_password = secret
+            store[_SECRET_STORE_KEY] = crypto.encrypt(secret)
 
     _save(store)
     log.info("ldap.config.updated", configured=settings.ldap_configured)

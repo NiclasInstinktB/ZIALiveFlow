@@ -95,7 +95,9 @@ def _settings_envelope(editable: dict, restart_pending: list[str] | None = None)
         "editable": editable,
         "catalogue": settings_store.catalogue(),
         "restart_required": sorted(settings_store.RESTART_REQUIRED),
-        "restart_pending": restart_pending or [],
+        # Union of "outstanding since this process started" and whatever this very
+        # request just changed, so a reload keeps showing it.
+        "restart_pending": sorted(set(settings_store.restart_pending()) | set(restart_pending or [])),
         "read_only": settings_store.read_only_view(),
     }
 

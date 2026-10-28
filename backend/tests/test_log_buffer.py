@@ -80,3 +80,72 @@ def test_stdlib_handler_catches_tracebacks():
     assert entry["event"] == "Aborted while fetching"
     assert entry["level"] == "error"
     assert "ValueError: broken" in str(entry["fields"].get("exception"))
+
+
+def test_level_aliases_are_counted_as_the_level_they_mean():
+    """structlog and the standard library do not agree on the spelling."""
+    log_buffer.record(level="WARNING", event="upper case")
+    log_buffer.record(level="warn", event="short form")
+    log_buffer.record(level="CRITICAL", event="critical")
+    log_buffer.record(level="exception", event="exception")
+    counts = log_buffer.counts()
+    assert counts["total"] == 4
+    assert counts["warnings"] == 2
+    assert counts["errors"] == 2
+    assert [e["level"] for e in log_buffer.recent()] == ["exception", "critical", "warn", "warning"]
+
+
+def test_an_unknown_level_is_not_let_in():
+    """Anything the level table does not know counts as below warning, or a typo in a
+    caller would quietly fill the buffer with routine chatter."""
+    log_buffer.record(level="notice", event="nothing to see")
+    log_buffer.record(level="", event="no level at all")
+    assert log_buffer.counts()["total"] == 0
+
+
+def test_the_level_filter_is_applied_before_the_limit():
+    """The point of the 300 slot buffer: one error behind 60 warnings must still be
+    findable by filtering, not pushed out of the window first."""
+    log_buffer.record(level="error", event="the one error")
+    for i in range(60):
+        log_buffer.record(level="warning", event=f"warning-{i}")
+    assert [e["event"] for e in log_buffer.recent(limit=50, level="error")] == ["the one error"]
+
+
+def test_the_limit_is_kept_inside_sane_bounds():
+    for i in range(10):
+        log_buffer.record(level="error", event=f"error-{i}")
+    assert len(log_buffer.recent(limit=0)) == 10       # 0 means the default, not nothing
+    assert len(log_buffer.recent(limit=-5)) == 1       # never negative slicing
+    assert len(log_buffer.recent(limit=10_000)) == 10  # never more than there is
+
+
+def test_a_secret_is_masked_whatever_the_key_is_called():
+    log_buffer.record(
+        level="error",
+        event="sso.exchange_failed",
+        fields={
+            "Authorization": "Bearer abc", "client_secret": "s3cr3t", "api_key": "k",
+            "refresh_token": "r", "bind_pw": "p", "benutzer_passwort": "q",
+        },
+    )
+    assert set(log_buffer.recent()[0]["fields"].values()) == {"***"}
+
+
+def test_a_non_scalar_field_does_not_break_the_entry():
+    log_buffer.record(level="error", event="x", fields={"nets": [1, 2], "when": None})
+    entry = log_buffer.recent()[0]
+    assert entry["fields"]["when"] is None
+    assert "1" in str(entry["fields"]["nets"])
+
+
+def test_an_enormous_field_is_truncated():
+    log_buffer.record(level="error", event="y", fields={"body": "z" * 10_000})
+    assert len(log_buffer.recent()[0]["fields"]["body"]) < 2_100
+
+
+def test_clear_reports_what_it_removed():
+    for i in range(5):
+        log_buffer.record(level="error", event=f"e{i}")
+    assert log_buffer.clear() == 5
+    assert log_buffer.counts()["total"] == 0

@@ -28,13 +28,22 @@ _SECRET_STORE_KEY = "oidc_client_secret_enc"
 
 
 def _read_raw() -> dict:
+    """The stored config as a dict. Missing, unreadable or not an object gives {}.
+
+    A damaged file must not stop the app from starting: ``load_and_apply`` runs in the
+    startup path, so anything that is not a JSON object has to be treated as "nothing
+    stored" rather than raising on the first ``.get``.
+    """
     if not _PATH.exists():
         return {}
     try:
-        return json.loads(_PATH.read_text(encoding="utf-8"))
+        data = json.loads(_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        data = None
+    if not isinstance(data, dict):
         log.warning("oidc.config.read_failed", path=str(_PATH))
         return {}
+    return data
 
 
 def _save(store: dict) -> None:
@@ -63,9 +72,19 @@ def load_and_apply() -> None:
             setattr(settings, name, bool(data[name]))
             applied += 1
     enc = data.get(_SECRET_STORE_KEY)
-    if enc:
-        settings.oidc_client_secret = crypto.decrypt(enc)
-        applied += 1
+    if isinstance(enc, str) and enc:
+        secret = crypto.decrypt(enc)
+        if secret:
+            settings.oidc_client_secret = secret
+            applied += 1
+        else:
+            # Undecryptable, typically because JWT_SECRET was rotated without
+            # APP_ENCRYPTION_KEY being set. Leave whatever .env provides in place: an
+            # empty secret here would also take the working fallback away.
+            log.warning(
+                "oidc.config.secret_unreadable",
+                hint="Client secret could not be decrypted; re-enter it in the admin backend.",
+            )
     if applied:
         log.info("oidc.config.loaded", fields=applied, configured=settings.oidc_configured)
 
@@ -89,21 +108,30 @@ def update(changes: dict) -> dict:
     Secret semantics (``oidc_client_secret``): key NOT present means unchanged; an empty
     string clears it; a non-empty string sets a new one (stored encrypted).
     """
-    store = _read_raw()
-
+    coerced: dict = {}
     for name in _STR_FIELDS:
         if changes.get(name) is not None:
-            val = str(changes[name]).strip()
-            setattr(settings, name, val)
-            store[name] = val
+            coerced[name] = str(changes[name]).strip()
 
     for name in _BOOL_FIELDS:
         if changes.get(name) is not None:
-            setattr(settings, name, bool(changes[name]))
-            store[name] = bool(changes[name])
+            coerced[name] = bool(changes[name])
 
-    if _SECRET_FIELD in changes and changes[_SECRET_FIELD] is not None:
-        secret = str(changes[_SECRET_FIELD])
+    # Only fields that really differ are stored. The SSO form posts the whole draft on
+    # every save, so storing all of it would bake the values that still come from .env
+    # into the file on the first save, after which editing .env would silently stop
+    # having any effect.
+    applied = {n: v for n, v in coerced.items() if getattr(settings, n) != v}
+    secret = str(changes[_SECRET_FIELD]) if changes.get(_SECRET_FIELD) is not None else None
+    if not applied and secret is None:
+        return current_public()
+
+    store = _read_raw()
+    for name, value in applied.items():
+        setattr(settings, name, value)
+        store[name] = value
+
+    if secret is not None:
         if secret == "":
             settings.oidc_client_secret = ""
             store.pop(_SECRET_STORE_KEY, None)

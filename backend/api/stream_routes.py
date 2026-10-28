@@ -44,6 +44,11 @@ from backend.ingest.redact import redact, redact_all
 from backend.logging_config import get_logger
 
 router = APIRouter(prefix="/api/stream", tags=["stream"])
+
+# Close reasons sent alongside code 1008. The client branches on these, so they are a
+# wire contract: do not reword them.
+_WS_UNAUTHORIZED = "unauthorized"
+_WS_NO_LOG_PERMISSION = "no_log_permission"
 log = get_logger("api.stream")
 
 
@@ -178,7 +183,11 @@ async def ws_stream(websocket: WebSocket) -> None:
     token = websocket.cookies.get(settings.session_cookie_name)
     principal = principal_from_cookie(token)
     if principal is None or not principal.can_read_logs:
-        await websocket.close(code=1008)  # policy violation (not signed in / no logs permission)
+        # Same close code either way, but the reason says which one it was. Without it
+        # the client cannot tell "sign in again" from "you lost the log permission" and
+        # just sits there showing a dead connection.
+        reason = _WS_UNAUTHORIZED if principal is None else _WS_NO_LOG_PERMISSION
+        await websocket.close(code=1008, reason=reason)
         return
     client_host = websocket.client.host if websocket.client else ""
     ip = audit.client_ip(websocket.headers, client_host)
@@ -188,9 +197,13 @@ async def ws_stream(websocket: WebSocket) -> None:
     view = hub.register()
     send_lock = asyncio.Lock()  # serializes sends coming from several tasks
     revoked = False  # True → the session was revoked or expired mid-stream (close 1008)
+    revoked_reason = _WS_UNAUTHORIZED
     # Anonymized? Re-evaluated on the re-auth tick, so that a permission change (clear
     # text revoked) masks a RUNNING stream immediately as well.
     obfuscated = principal.logs_obfuscated
+    # The last set_filters message, kept so the filters can be re-applied under the new
+    # rules when the session loses the clear-text permission mid-stream.
+    last_filters: dict | None = None
 
     async def send(msg: dict) -> None:
         async with send_lock:
@@ -214,31 +227,64 @@ async def ws_stream(websocket: WebSocket) -> None:
         # or the token expires. principal_from_cookie() rechecks the token signature and
         # expiry and reads account status and permissions fresh from the store, so
         # disabling, deleting or de-permissioning hits the open WS within about 2.5s.
-        nonlocal revoked, obfuscated
+        nonlocal revoked, revoked_reason, obfuscated
         while True:
             await asyncio.sleep(_STATS_INTERVAL_S)
             current = principal_from_cookie(token)
             if current is None or not current.can_read_logs:
+                # The session being gone means sign in again. Merely losing the log
+                # permission does not, the person is still signed in and the rest of
+                # the app still works for them.
+                revoked_reason = _WS_UNAUTHORIZED if current is None else _WS_NO_LOG_PERMISSION
                 revoked = True
-                log.info("stream.ws_revoked", user=principal.username)
+                log.info("stream.ws_revoked", user=principal.username, reason=revoked_reason)
                 return
             if current.logs_obfuscated != obfuscated:
                 # Clear-text permission revoked (or granted): mask from now on, or stop
-                # masking. Existing filters stay; a user filter that is no longer allowed
-                # is dropped at the next set_filters.
+                # masking.
                 obfuscated = current.logs_obfuscated
                 log.info("stream.ws_obfuscation_changed", user=principal.username, obfuscated=obfuscated)
+                if obfuscated and last_filters is not None:
+                    # Masking alone is not enough. A user filter set while clear text was
+                    # still allowed would keep running, and that is exactly the oracle the
+                    # filter block exists to prevent: every record that arrives belongs to
+                    # the named person, and source IP, device and target are not masked.
+                    # Re-apply the stored message under the new rules and drop what is
+                    # denied, then send the (now empty) snapshot so the client matches.
+                    groups, join, denied = _parse_filters(last_filters, True)
+                    if denied:
+                        log.warning(
+                            "stream.filter_denied", user=principal.username, fields=",".join(denied)
+                        )
+                        view.set_filters(groups, join, _parse_feeds(last_filters))
+                        await send({
+                            "type": "snapshot",
+                            "records": view_snapshot(),
+                            "stats": {**view.stats(), "feed": _feed_state()},
+                            "denied_fields": denied,
+                        })
             await send({"type": "stats", "stats": {**view.stats(), "feed": _feed_state()}})
 
     async def receiver() -> None:
+        nonlocal last_filters
         while True:
-            raw = await websocket.receive_text()
+            # Not receive_text(): that reads message["text"], which a binary frame does
+            # not have, so one such frame raised KeyError in here, killed this task and
+            # left the socket open but answering nothing. The browser kept showing a
+            # live view that would never update again.
+            message = await websocket.receive()
+            if message["type"] != "websocket.receive":
+                return  # the client went away
+            raw = message.get("text")
+            if raw is None:
+                continue  # a binary frame carries no protocol message
             try:
                 msg = json.loads(raw)
             except (ValueError, TypeError):
                 continue
             mtype = msg.get("type") if isinstance(msg, dict) else None
             if mtype == "set_filters":
+                last_filters = msg
                 groups, join, denied = _parse_filters(msg, obfuscated)
                 if denied:
                     # The UI hides the field, so only a tampered client gets here. Log it
@@ -279,7 +325,7 @@ async def ws_stream(websocket: WebSocket) -> None:
         if revoked:
             # Session revoked or expired mid-stream: close cleanly with 1008.
             try:
-                await websocket.close(code=1008)
+                await websocket.close(code=1008, reason=revoked_reason)
             except RuntimeError:  # pragma: no cover - the socket may already be closed
                 pass
     except WebSocketDisconnect:

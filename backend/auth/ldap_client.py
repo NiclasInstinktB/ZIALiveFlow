@@ -166,11 +166,17 @@ def _search_principal(search_conn, identity: str) -> tuple[frozenset[str], str, 
     """
     sam = identity.split("@")[0].split("\\")[-1]
     upn = identity if "@" in identity else f"{sam}@{settings.ldap_domain}"
+    # RFC 4515 escaping at the point of interpolation. The name is a VALUE to search
+    # for, never part of the filter's structure: a bracket or a wildcard in it would
+    # otherwise rewrite the query, and the groups of whatever account the rewritten
+    # query returns are the ones that end up deciding the session's permissions. Only
+    # the filter copies are escaped; ``sam`` is still used as the display-name fallback.
+    f_upn, f_sam, f_identity = _ldap_escape(upn), _ldap_escape(sam), _ldap_escape(identity)
     search_conn.search(
         search_base=settings.ldap_base_dn,
         search_filter=(
-            f"(&(objectClass=user)(|(userPrincipalName={upn})"
-            f"(sAMAccountName={sam})(mail={identity})))"
+            f"(&(objectClass=user)(|(userPrincipalName={f_upn})"
+            f"(sAMAccountName={f_sam})(mail={f_identity})))"
         ),
         attributes=[settings.ldap_group_attr, "displayName", "cn", "mail", "userPrincipalName"],
     )

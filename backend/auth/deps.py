@@ -51,9 +51,33 @@ def _slide_session(payload: dict, principal: Principal, response: Response) -> N
         return
     now = int(datetime.now(timezone.utc).timestamp())
     if (now - iat) * 2 < lifetime:
-        return  # still in the first half → no refresh needed
+        return  # still in the first half, no refresh needed
+
+    # Cap how long a directory session can keep renewing itself.
+    #
+    # A local account gets its permissions recomputed from the groups on every renewal,
+    # so a revocation lands by itself. A directory user has no account to read, the
+    # permissions live in the token, and the renewal copies them forward. Without a cap
+    # that session can be extended for ever and "takes effect at the next sign-in" never
+    # arrives, even after the authorizing group is deleted outright.
+    #
+    # So a directory session lives at most one full lifetime counted from the actual
+    # sign-in, then the cookie is left to expire and the person signs in again, which is
+    # where the directory gets asked afresh.
+    session_start = iat
+    try:
+        session_start = int(payload.get("sst", iat))
+    except (TypeError, ValueError):
+        pass
+    if principal.source == "ad" and now - session_start >= settings.session_ttl_minutes * 60:
+        return
+
     fresh = create_session_token(
-        principal.username, principal.display_name, principal.source, principal.permissions
+        principal.username,
+        principal.display_name,
+        principal.source,
+        principal.permissions,
+        session_start=session_start,
     )
     set_session_cookie(response, fresh)
 

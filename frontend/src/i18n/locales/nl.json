@@ -210,7 +210,8 @@
       "badCidr": "Ongeldige CIDR (bijv. 10.20.30.0/24)",
       "netTooLarge": "Netwerk te groot, kleinste prefix is /{{prefix}} (bijv. /23, /24)",
       "badPattern": "Ongeldig patroon",
-      "badIp": "Geen geldig IP-adres"
+      "badIp": "Geen geldig IP-adres",
+      "filterDenied": "Dit filter is niet beschikbaar in de geanonimiseerde weergave en is niet toegepast."
     },
     "opAnd": "EN",
     "opOr": "OF",

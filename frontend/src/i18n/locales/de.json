@@ -210,7 +210,8 @@
       "badCidr": "ungültiges CIDR (z.B. 10.20.30.0/24)",
       "netTooLarge": "Netz zu groß, kleinstes Präfix /{{prefix}} (z.B. /23, /24)",
       "badPattern": "ungültiges Muster",
-      "badIp": "keine gültige IP-Adresse"
+      "badIp": "keine gültige IP-Adresse",
+      "filterDenied": "Dieser Filter ist in der anonymisierten Ansicht nicht verfügbar und wurde nicht angewendet."
     },
     "opAnd": "UND",
     "opOr": "ODER",

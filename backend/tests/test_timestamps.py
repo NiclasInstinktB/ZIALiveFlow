@@ -112,3 +112,32 @@ def test_parser_sets_ts_epoch_for_both_feeds():
     # The raw value is kept for diagnostics.
     assert rec_web.ts == "Thu Jul 23 09:12:47 2026"
     assert rec_web.as_dict()["ts_epoch"] == rec_web.ts_epoch
+
+
+# ── A digit string that int() cannot read ──────────────────────────
+# ``str.isdigit()`` is true for characters such as the superscript two, which ``int()``
+# and ``float()`` then refuse. A feed line whose time column holds such a character (a
+# shifted column, text that landed in the wrong position) must still produce a record
+# with ``ts_epoch = None``, not blow the line up: ``to_epoch`` promises None for anything
+# it cannot interpret.
+@pytest.mark.parametrize("raw", ["\u00b2" * 13, "\u00b2" * 9, "\u00b2\u00b3\u00b9"])
+def test_non_decimal_digit_string_is_not_interpretable(raw):
+    assert raw.isdigit()          # precondition: it reaches the epoch branch
+    assert to_epoch(raw) is None  # must not raise
+
+
+def test_arabic_indic_digits_still_read_as_epoch():
+    """Those ARE decimal digits and int() accepts them, so they must keep working."""
+    native = "1784628000000".translate(str.maketrans("0123456789", "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669"))
+    assert to_epoch(native) == 1784628000.0
+
+
+def test_parse_keeps_the_record_when_the_timestamp_is_unreadable():
+    """The record still has to reach the user; only ``ts_epoch`` is unknown."""
+    from backend.ingest import parser
+
+    line = ["web", "10.0.0.1", "1.1.1.1", "a@b", "HQ", "\u00b2" * 13]
+    rec = parser.parse(line, seq=1, received_at=0.0)
+    assert rec is not None
+    assert rec.ts_epoch is None
+    assert rec.ts == "\u00b2" * 13   # the raw value is kept for diagnostics
