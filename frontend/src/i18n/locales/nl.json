@@ -210,6 +210,8 @@
       "badCidr": "Ongeldige CIDR (bijv. 10.20.30.0/24)",
       "netTooLarge": "Netwerk te groot, kleinste prefix is /{{prefix}} (bijv. /23, /24)",
       "badPattern": "Ongeldig patroon",
+      "badRange": "Ongeldig bereik (bijv. 10.20.30.10-10.20.30.50)",
+      "rangeTooLarge": "Bereik te groot, maximaal 512 adressen (zoals /23)",
       "badIp": "Geen geldig IP-adres",
       "filterDenied": "Dit filter is niet beschikbaar in de geanonimiseerde weergave en is niet toegepast."
     },
@@ -219,7 +221,7 @@
       "userWithDomain": "voornaam.achternaam  →  {{domain}} wordt toegevoegd",
       "userPlain": "voornaam.achternaam@domein",
       "location": "exact: Site-HQ->other  ·  deel: Site-H*",
-      "ip": "10.20.30.40  ·  10.20.30.*  ·  10.20.30.0/24",
+      "ip": "10.20.30.40, 10.20.30.41  ·  10.20.30.1-50  ·  10.20.30.*  ·  10.20.30.0/24",
       "query": "🔍 Query:  type=Web*   status=404   rule!=Default   -github   (veld=waarde, wildcards, EN)"
     },
     "addFilter": "+ Filter",

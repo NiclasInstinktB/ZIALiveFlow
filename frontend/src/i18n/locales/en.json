@@ -210,6 +210,8 @@
       "badCidr": "Invalid CIDR (e.g. 10.20.30.0/24)",
       "netTooLarge": "Network too large, smallest prefix is /{{prefix}} (e.g. /23, /24)",
       "badPattern": "Invalid pattern",
+      "badRange": "Invalid range (e.g. 10.20.30.10-10.20.30.50)",
+      "rangeTooLarge": "Range too large, at most 512 addresses (like /23)",
       "badIp": "Not a valid IP address",
       "filterDenied": "This filter is not available in the anonymised view and was not applied."
     },
@@ -219,7 +221,7 @@
       "userWithDomain": "first.last  →  {{domain}} is appended",
       "userPlain": "first.last@domain",
       "location": "exact: Site-HQ->other  ·  partial: Site-H*",
-      "ip": "10.20.30.40  ·  10.20.30.*  ·  10.20.30.0/24",
+      "ip": "10.20.30.40, 10.20.30.41  ·  10.20.30.1-50  ·  10.20.30.*  ·  10.20.30.0/24",
       "query": "🔍 Query:  type=Web*   status=404   rule!=Default   -github   (field=value, wildcards, AND)"
     },
     "addFilter": "+ Filter",

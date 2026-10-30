@@ -210,6 +210,8 @@
       "badCidr": "CIDR が不正です（例: 10.20.30.0/24）",
       "netTooLarge": "ネットワークが大きすぎます。最小プレフィックスは /{{prefix}} です（例: /23、/24）",
       "badPattern": "パターンが不正です",
+      "badRange": "範囲が不正です（例: 10.20.30.10-10.20.30.50）",
+      "rangeTooLarge": "範囲が大きすぎます。最大 512 アドレスです（/23 相当）",
       "badIp": "有効な IP アドレスではありません",
       "filterDenied": "このフィルターは匿名化された表示では使用できないため、適用されませんでした。"
     },
@@ -219,7 +221,7 @@
       "userWithDomain": "first.last  →  {{domain}} が付加されます",
       "userPlain": "first.last@domain",
       "location": "完全一致: Site-HQ->other  ·  部分一致: Site-H*",
-      "ip": "10.20.30.40  ·  10.20.30.*  ·  10.20.30.0/24",
+      "ip": "10.20.30.40, 10.20.30.41  ·  10.20.30.1-50  ·  10.20.30.*  ·  10.20.30.0/24",
       "query": "🔍 クエリ:  type=Web*   status=404   rule!=Default   -github   （フィールド=値、ワイルドカード、AND）"
     },
     "addFilter": "+ フィルター",

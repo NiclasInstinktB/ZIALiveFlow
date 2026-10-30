@@ -26,7 +26,8 @@ from backend.logging_config import get_logger
 log = get_logger("ingest.parser")
 
 # One precompiled filter: (field, matcher). The matcher is either an exact string (a fast
-# == comparison), an IP network (CIDR membership) or a compiled regex (wildcard * / ?).
+# == comparison), an IP network (CIDR membership), an IP range (``from-to``) or a compiled
+# regex (wildcard * / ?).
 CompiledFilter = tuple[str, object]
 # One precompiled group: (op, filters). ``op`` is "and" or "or".
 CompiledGroup = tuple[str, list[CompiledFilter]]
@@ -46,11 +47,47 @@ _MIN_IPV6_PREFIX = 64
 _MAX_WILDCARDS = 3
 
 
+class IPRange:
+    """Inclusive IP range ``from-to``, e.g. ``10.20.30.10-10.20.30.50``."""
+
+    __slots__ = ("version", "lo", "hi")
+
+    def __init__(self, version: int, lo: int, hi: int) -> None:
+        self.version, self.lo, self.hi = version, lo, hi
+
+    def __contains__(self, ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+        return ip.version == self.version and self.lo <= int(ip) <= self.hi
+
+
+def parse_ip_range(value: str) -> IPRange | None:
+    """``a-b`` → :class:`IPRange`; ``None`` if it is not a valid range.
+
+    The IPv4 short form ``10.20.30.10-50`` (last octet only) is accepted.
+    Swapped bounds are turned around.
+    """
+    lo_s, sep, hi_s = value.partition("-")
+    if not sep:
+        return None
+    lo_s, hi_s = lo_s.strip(), hi_s.strip()
+    if hi_s.isdigit() and lo_s.count(".") == 3:
+        hi_s = lo_s.rsplit(".", 1)[0] + "." + hi_s
+    try:
+        lo, hi = ipaddress.ip_address(lo_s), ipaddress.ip_address(hi_s)
+    except ValueError:
+        return None
+    if lo.version != hi.version:
+        return None
+    a, b = sorted((int(lo), int(hi)))
+    return IPRange(lo.version, a, b)
+
+
 def compile_specs(specs: list[FilterSpec]) -> list[CompiledFilter]:
     """Precompile the filters ONCE when they are set, so the hot loop stays cheap.
 
     - IP fields containing ``/`` → CIDR network (e.g. ``10.20.30.0/24`` or ``/23``),
       matched by subnet membership.
+    - IP fields containing ``-`` → range (e.g. ``10.20.30.10-10.20.30.50``), at most as
+      large as the largest allowed network.
     - Values containing ``*`` or ``?`` → glob regex.
     - Everything else → exact string.
     User/location are case insensitive, IPs are exact.
@@ -74,6 +111,15 @@ def compile_specs(specs: list[FilterSpec]) -> list[CompiledFilter]:
                 out.append((field, net))
                 continue
             # not a valid CIDR → falls through to the string/wildcard handling below
+        if field in _IP_FIELDS and "-" in value:
+            rng = parse_ip_range(value)
+            if rng is not None:
+                max_bits = 32 - _MIN_IPV4_PREFIX if rng.version == 4 else 128 - _MIN_IPV6_PREFIX
+                if rng.hi - rng.lo + 1 > 1 << max_bits:
+                    log.warning("filter.range_too_broad", field=field, value=value)
+                    continue
+                out.append((field, rng))
+                continue
         if "*" in value or "?" in value:
             if value.count("*") > _MAX_WILDCARDS:
                 # Too many wildcards: discard (ReDoS protection) rather than risk the loop.
@@ -141,7 +187,7 @@ def _hit(field: str, matcher: object, src: str, dst: str, user: str, loc: str) -
         val = loc
     if isinstance(matcher, str):
         return val == matcher
-    if isinstance(matcher, _Network):  # CIDR: subnet membership
+    if isinstance(matcher, (*_Network, IPRange)):  # CIDR/range: membership
         try:
             return ipaddress.ip_address(val) in matcher
         except ValueError:

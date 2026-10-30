@@ -210,6 +210,8 @@
       "badCidr": "CIDR inválido (ex.: 10.20.30.0/24)",
       "netTooLarge": "Rede grande demais, o menor prefixo é /{{prefix}} (ex.: /23, /24)",
       "badPattern": "Padrão inválido",
+      "badRange": "Intervalo inválido (ex.: 10.20.30.10-10.20.30.50)",
+      "rangeTooLarge": "Intervalo grande demais, no máximo 512 endereços (como /23)",
       "badIp": "Endereço IP inválido",
       "filterDenied": "Este filtro não está disponível na visualização anonimizada e não foi aplicado."
     },
@@ -219,7 +221,7 @@
       "userWithDomain": "nome.sobrenome  →  {{domain}} é acrescentado",
       "userPlain": "nome.sobrenome@dominio",
       "location": "exato: Site-HQ->other  ·  parcial: Site-H*",
-      "ip": "10.20.30.40  ·  10.20.30.*  ·  10.20.30.0/24",
+      "ip": "10.20.30.40, 10.20.30.41  ·  10.20.30.1-50  ·  10.20.30.*  ·  10.20.30.0/24",
       "query": "🔍 Query:  type=Web*   status=404   rule!=Default   -github   (campo=valor, curingas, E)"
     },
     "addFilter": "+ Filtro",

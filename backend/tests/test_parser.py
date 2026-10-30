@@ -423,3 +423,25 @@ def test_a_wildcard_on_user_and_location_ignores_case():
     loc = _c(FilterSpec(field=FilterField.LOCATION, value="site-*"))
     assert parser.wants(_web("10.0.0.1", "1.1.1.1", "Alice@Corp.Example"), user)
     assert parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b", location="Site-HQ"), loc)
+    assert parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b", location="Site-HQ"), loc)
+
+
+def test_ip_range_filter():
+    from backend.ingest.models import FilterField, FilterSpec
+    from backend.ingest.parser import compile_specs, _hit
+
+    for value in ("10.20.30.10-10.20.30.50", "10.20.30.10-50", "10.20.30.50 - 10.20.30.10"):
+        [(field, m)] = compile_specs([FilterSpec(field=FilterField.SRC_IP, value=value)])
+        assert _hit(field, m, "10.20.30.10", "", "", "")
+        assert _hit(field, m, "10.20.30.50", "", "", "")
+        assert not _hit(field, m, "10.20.30.51", "", "", "")
+        assert not _hit(field, m, "10.20.30.9", "", "", "")
+        assert not _hit(field, m, "kein-ip", "", "", "")
+
+
+def test_ip_range_too_broad_is_dropped():
+    from backend.ingest.models import FilterField, FilterSpec
+    from backend.ingest.parser import compile_specs
+
+    assert compile_specs([FilterSpec(field=FilterField.SRC_IP, value="10.0.0.0-10.0.2.0")]) == []
+    assert len(compile_specs([FilterSpec(field=FilterField.SRC_IP, value="10.0.0.0-10.0.1.255")])) == 1

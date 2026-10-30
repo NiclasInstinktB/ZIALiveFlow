@@ -210,6 +210,8 @@
       "badCidr": "CIDR 无效（例如 10.20.30.0/24）",
       "netTooLarge": "网段过大，最小前缀为 /{{prefix}}（例如 /23、/24）",
       "badPattern": "模式无效",
+      "badRange": "范围无效（例如 10.20.30.10-10.20.30.50）",
+      "rangeTooLarge": "范围过大，最多 512 个地址（相当于 /23）",
       "badIp": "不是有效的 IP 地址",
       "filterDenied": "此过滤条件在匿名视图中不可用，因此未生效。"
     },
@@ -219,7 +221,7 @@
       "userWithDomain": "first.last  →  自动补上 {{domain}}",
       "userPlain": "first.last@domain",
       "location": "精确：Site-HQ->other  ·  部分：Site-H*",
-      "ip": "10.20.30.40  ·  10.20.30.*  ·  10.20.30.0/24",
+      "ip": "10.20.30.40, 10.20.30.41  ·  10.20.30.1-50  ·  10.20.30.*  ·  10.20.30.0/24",
       "query": "🔍 查询：  type=Web*   status=404   rule!=Default   -github   （字段=值、通配符、AND）"
     },
     "addFilter": "+ 过滤器",

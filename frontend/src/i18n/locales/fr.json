@@ -213,6 +213,8 @@
       "badCidr": "CIDR invalide (p. ex. 10.20.30.0/24)",
       "netTooLarge": "Réseau trop grand, le plus petit préfixe est /{{prefix}} (p. ex. /23, /24)",
       "badPattern": "Motif invalide",
+      "badRange": "Plage invalide (p. ex. 10.20.30.10-10.20.30.50)",
+      "rangeTooLarge": "Plage trop grande, 512 adresses au maximum (comme /23)",
       "badIp": "Adresse IP non valide",
       "filterDenied": "Ce filtre n'est pas disponible dans l'affichage anonymisé et n'a pas été appliqué."
     },
@@ -222,7 +224,7 @@
       "userWithDomain": "prenom.nom  →  {{domain}} est ajouté",
       "userPlain": "prenom.nom@domaine",
       "location": "exact : Site-HQ->other  ·  partiel : Site-H*",
-      "ip": "10.20.30.40  ·  10.20.30.*  ·  10.20.30.0/24",
+      "ip": "10.20.30.40, 10.20.30.41  ·  10.20.30.1-50  ·  10.20.30.*  ·  10.20.30.0/24",
       "query": "🔍 Query:  type=Web*   status=404   rule!=Default   -github   (field=value, wildcards, AND)"
     },
     "addFilter": "+ Filtre",

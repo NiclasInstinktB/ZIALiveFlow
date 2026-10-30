@@ -210,6 +210,8 @@
       "badCidr": "CIDR no válido (p. ej. 10.20.30.0/24)",
       "netTooLarge": "Red demasiado grande, el prefijo mínimo es /{{prefix}} (p. ej. /23, /24)",
       "badPattern": "Patrón no válido",
+      "badRange": "Rango no válido (p. ej. 10.20.30.10-10.20.30.50)",
+      "rangeTooLarge": "Rango demasiado grande, como máximo 512 direcciones (como /23)",
       "badIp": "No es una dirección IP válida",
       "filterDenied": "Este filtro no está disponible en la vista anonimizada y no se ha aplicado."
     },
@@ -219,7 +221,7 @@
       "userWithDomain": "nombre.apellido  →  se añade {{domain}}",
       "userPlain": "nombre.apellido@dominio",
       "location": "exacto: Site-HQ->other  ·  parcial: Site-H*",
-      "ip": "10.20.30.40  ·  10.20.30.*  ·  10.20.30.0/24",
+      "ip": "10.20.30.40, 10.20.30.41  ·  10.20.30.1-50  ·  10.20.30.*  ·  10.20.30.0/24",
       "query": "🔍 Query:  type=Web*   status=404   rule!=Default   -github   (campo=valor, comodines, Y)"
     },
     "addFilter": "+ Filtro",

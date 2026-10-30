@@ -361,8 +361,40 @@ function isValidCIDR(v: string): boolean {
 interface FilterError {
   key: string;
   params?: Record<string, unknown>;
+  /** The offending value when several were entered with commas. */
+  part?: string;
+}
+function ipv4ToInt(v: string): number {
+  return v.split(".").reduce((acc, p) => acc * 256 + Number(p), 0);
+}
+/** Range `from-to`; the IPv4 short form `10.20.30.10-50` replaces only the last octet. */
+function validateRange(v: string): FilterError | null {
+  const [lo, hiRaw, ...rest] = v.split("-").map((p) => p.trim());
+  if (rest.length || !lo || !hiRaw) return { key: "live.err.badRange" };
+  const hi = /^\d+$/.test(hiRaw) && isValidIPv4(lo) ? lo.replace(/\d+$/, hiRaw) : hiRaw;
+  if (isValidIPv4(lo) && isValidIPv4(hi)) {
+    // Same limit as for CIDR: at most a /23 (512 addresses), server protection
+    if (Math.abs(ipv4ToInt(hi) - ipv4ToInt(lo)) + 1 > 512) return { key: "live.err.rangeTooLarge" };
+    return null;
+  }
+  if (isValidIPv6(lo) && isValidIPv6(hi)) return null;
+  return { key: "live.err.badRange" };
+}
+/** Several values separated by comma/semicolon: IP fields turn them into separate filters. */
+function splitFilterValues(field: FilterField, value: string): string[] {
+  if (field !== "src_ip" && field !== "dst_ip") return [value.trim()];
+  return value.split(/[,;]/).map((p) => p.trim()).filter(Boolean);
 }
 function validateFilter(field: FilterField, value: string): FilterError | null {
+  const parts = splitFilterValues(field, value);
+  if (!parts.length) return { key: "live.err.missingValue" };
+  for (const p of parts) {
+    const err = validateFilterValue(field, p);
+    if (err) return parts.length > 1 ? { ...err, part: p } : err;
+  }
+  return null;
+}
+function validateFilterValue(field: FilterField, value: string): FilterError | null {
   const v = value.trim();
   if (!v) return { key: "live.err.missingValue" };
   const hasWildcard = v.includes("*") || v.includes("?");
@@ -381,6 +413,7 @@ function validateFilter(field: FilterField, value: string): FilterError | null {
     if (Number(prefix) < minPrefix) return { key: "live.err.netTooLarge", params: { prefix: minPrefix } };
     return null;
   }
+  if (v.includes("-")) return validateRange(v);
   if (hasWildcard) {
     if (!/^[0-9a-fA-F.:*?]+$/.test(v)) return { key: "live.err.badPattern" };
     return null;
@@ -788,23 +821,25 @@ export function LiveView({
     return groups.findIndex((g) => g.op === "or" && g.items.some((f) => f.field === field));
   }
   function addDraft() {
-    let value = draftValue.trim();
-    if (!value || draftError) return;
-    // User without an @domain: append the configured domain suffix automatically.
-    if (draftField === "user" && userDomain && !value.includes("@")) value = value + userDomain;
-    const dupe = groups.some((g) =>
-      g.items.some((f) => f.field === draftField && f.value.toLowerCase() === value.toLowerCase())
-    );
-    if (dupe) {
+    if (!draftValue.trim() || draftError) return;
+    const exists = (v: string) =>
+      groups.some((g) => g.items.some((f) => f.field === draftField && f.value.toLowerCase() === v.toLowerCase()));
+    const values: string[] = [];
+    for (let value of splitFilterValues(draftField, draftValue)) {
+      // User without an @domain: append the configured domain suffix automatically.
+      if (draftField === "user" && userDomain && !value.includes("@")) value = value + userDomain;
+      if (!exists(value) && !values.some((v) => v.toLowerCase() === value.toLowerCase())) values.push(value);
+    }
+    if (!values.length) {
       setDraftValue("");
       return;
     }
-    const spec: FilterSpec = { field: draftField, value };
+    const specs: FilterSpec[] = values.map((value) => ({ field: draftField, value }));
     const gi = targetGroupIndex(draftField);
     const next =
       gi >= 0
-        ? groups.map((g, i) => (i === gi ? { ...g, items: [...g.items, spec] } : g))
-        : [...groups, { op: "or" as FilterOp, items: [spec] }];
+        ? groups.map((g, i) => (i === gi ? { ...g, items: [...g.items, ...specs] } : g))
+        : [...groups, { op: "or" as FilterOp, items: specs }];
     applyGroups(next);
     setDraftValue("");
   }
@@ -1100,7 +1135,7 @@ export function LiveView({
               onChange={(e) => setDraftValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addDraft()}
             />
-            {draftError && <span className="field-error">{t(draftError.key, draftError.params)}</span>}
+            {draftError && <span className="field-error">{draftError.part ? `${draftError.part}: ` : ""}{t(draftError.key, draftError.params)}</span>}
           </div>
           <button className="ghost" onClick={addDraft} disabled={!draftValue.trim() || !!draftError}>
             {t("live.addFilter")}
