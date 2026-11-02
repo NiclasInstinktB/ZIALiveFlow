@@ -3,6 +3,15 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.48.0
+
+Live flow filter takes IP ranges and lists.
+
+- Source and destination IP accept ranges like 10.20.30.10-10.20.30.50 or the short form 10.20.30.10-50. Swapped bounds get turned around.
+- A range covers at most 512 addresses, about a /23. Larger ones are rejected in the form and dropped by the server.
+- Several IPs separated by commas or semicolons become separate chips in the same group (OR) and mix with CIDR and ranges. The error names the part that failed.
+- New error messages in all 9 languages, placeholder updated.
+
 ## v0.47.0
 
 Audit of the whole codebase, 36 fixes. Two behaviours changed on purpose.
