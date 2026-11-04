@@ -7,8 +7,10 @@ Creates the virtual environment, installs the backend dependencies, installs the
 frontend packages and builds the UI. Safe to run again: it reuses an existing
 environment and only reinstalls what changed.
 
-Run it with any Python 3.11 or newer. It finds the right interpreter inside the
-virtual environment by itself, so there is nothing to activate first.
+Run it with the newest Python you have, 3.15 at the time of writing (3.11 is the floor).
+It finds the right interpreter inside the virtual environment by itself, so there is
+nothing to activate first. An existing environment built on an older Python is rebuilt
+on the one running this script.
 """
 from __future__ import annotations
 
@@ -29,6 +31,23 @@ def venv_python() -> Path:
     if os.name == "nt":
         return VENV / "Scripts" / "python.exe"
     return VENV / "bin" / "python"
+
+
+def venv_version() -> tuple[int, int] | None:
+    """Python version the existing venv was built with, None if there is none (or it is
+    broken, e.g. its base interpreter got uninstalled)."""
+    py = venv_python()
+    if not py.exists():
+        return None
+    try:
+        out = subprocess.run(
+            [str(py), "-c", "import sys; print(*sys.version_info[:2])"],
+            capture_output=True, text=True, timeout=30,
+        )
+        major, minor = out.stdout.split()
+        return int(major), int(minor)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> None:
@@ -61,11 +80,20 @@ def main() -> None:
     npm = need("npm", "Install Node.js from https://nodejs.org and reopen your terminal.")
 
     print("== virtual environment ==")
-    if venv_python().exists():
-        print(f"reusing {VENV}")
+    have = venv_version()
+    mine = sys.version_info[:2]
+    if have is not None and have >= mine:
+        print(f"reusing {VENV} (Python {have[0]}.{have[1]})")
     else:
-        venv.EnvBuilder(with_pip=True, clear=False).create(VENV)
+        # a venv on an older python than the one running this gets rebuilt. otherwise
+        # it sits on 3.x forever even after a newer python is installed
+        if have is not None:
+            print(f"{VENV} runs Python {have[0]}.{have[1]}, rebuilding it on {mine[0]}.{mine[1]}")
+        venv.EnvBuilder(with_pip=True, clear=True).create(VENV)
         print(f"created {VENV}")
+    # pyyaml (via uvicorn[standard]) has no wheel for a brand new python yet and most
+    # machines have no compiler, so build it as plain python
+    os.environ.setdefault("PYYAML_FORCE_LIBYAML", "0")
 
     py = str(venv_python())
     print("\n== backend dependencies ==")

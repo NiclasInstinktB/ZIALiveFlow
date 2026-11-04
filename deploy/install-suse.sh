@@ -15,19 +15,9 @@ DIR=/opt/$APP
 [ "$(id -u)" -eq 0 ] || { echo "Please run as root."; exit 1; }
 [ -d "$DIR/.git" ] || { echo "No repo at $DIR. Clone it there first."; exit 1; }
 
-# NOTHING is installed via zypper. python3 (3.11+), node, npm, git and nginx
-# are expected to be present already; this script only uses what is there.
-echo "== Selecting an existing Python =="
-PYBIN="${PYTHON:-}"
-if [ -z "$PYBIN" ]; then
-  for b in python3.12 python3.11 python3; do
-    command -v "$b" >/dev/null 2>&1 && { PYBIN="$b"; break; }
-  done
-fi
-[ -n "$PYBIN" ] && command -v "$PYBIN" >/dev/null 2>&1 || {
-  echo "ERROR: no python3 on PATH. (Set PYTHON=/path/to/python3 and run again.)"; exit 1;
-}
-echo "  Python: $PYBIN ($("$PYBIN" --version 2>&1))"
+# NOTHING is installed via zypper. Python 3.15, node, npm, git and nginx are
+# expected to be present already; this script only uses what is there.
+# deploy/venv.sh picks the newest python3.x on PATH, PYTHON=... overrides it.
 
 echo "== Checking for required tools (warning only, nothing is installed) =="
 for t in git nginx node npm; do
@@ -50,7 +40,7 @@ chmod 750 "/etc/ssl/$APP"
 git config --system --add safe.directory "$DIR" 2>/dev/null || true
 
 echo "== Build (venv + frontend) as $SVCUSER =="
-sudo -u "$SVCUSER" PYTHON="$PYBIN" bash "$DIR/deploy/setup.sh"
+sudo -u "$SVCUSER" ${PYTHON:+PYTHON="$PYTHON"} bash "$DIR/deploy/setup.sh"
 
 echo "== systemd units =="
 install -m644 "$DIR/deploy/$APP.service"         "/etc/systemd/system/$APP.service"

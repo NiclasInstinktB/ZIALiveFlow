@@ -3,6 +3,18 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.49.0
+
+Server installs move to the newest Python by themselves.
+
+- New deploy/venv.sh, used by setup.sh and update.sh. It picks the newest python3.x on PATH instead of preferring python3.12. PYTHON=... still overrides it.
+- If the venv runs on an older Python than the newest one installed, the next update builds a new venv next to it and swaps it in only after every dependency installed. A failed build keeps the old venv.
+- A venv whose base Python got uninstalled is rebuilt instead of left broken.
+- The update log warns while the host has nothing newer than Python 3.14.
+- pyyaml is built as plain Python, since there is no wheel for Python 3.15 yet and servers usually have no compiler.
+- install.py rebuilds an existing venv that is older than the Python running it.
+- README and DEPLOY.md name Python 3.15.
+
 ## v0.48.2
 
 Dependencies on current versions, runs on Python 3.15.

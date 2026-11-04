@@ -58,7 +58,7 @@ ring buffer and expire after a configurable retention window.
 
 | Requirement | Why |
 |---|---|
-| **Python 3.11 or newer** | Runs the backend, the TCP ingest and the WebSocket. |
+| **Python 3.15** (3.11 is the floor) | Runs the backend, the TCP ingest and the WebSocket. Use the newest release, the install and update scripts move the venv onto it by themselves. |
 | **Node.js 20 or newer**, with npm | Builds the frontend once at install time. Not needed to run it afterwards. |
 | **Git** | Only for cloning, and for the self-update feature on a server install. |
 | **About 1 GB of free RAM** | For the default buffer ceiling of 200,000 records. Raise the ceiling and this grows. |

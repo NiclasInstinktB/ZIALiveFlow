@@ -19,9 +19,8 @@ rm -f logs/update.trigger
 git fetch --prune origin
 git reset --hard "origin/${BRANCH}"
 
-# Backend dependencies.
-.venv/bin/pip install --upgrade pip >/dev/null
-.venv/bin/pip install -r backend/requirements.txt
+# Backend dependencies. Also moves the venv to a newer Python once one is installed.
+bash deploy/venv.sh
 
 # Build the frontend.
 ( cd frontend && npm ci && npm run build )
