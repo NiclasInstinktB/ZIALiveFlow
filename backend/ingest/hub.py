@@ -126,8 +126,13 @@ class View:
         restriction at all."""
         if groups and isinstance(groups[0], FilterSpec):
             groups = [FilterGroup(op=FilterOp.OR, items=list(groups))]  # type: ignore[arg-type]
-        self._groups = [g.normalized() for g in groups]  # type: ignore[union-attr]
-        self._groups = [g for g in self._groups if g.items]
+        new_groups = [g.normalized() for g in groups]  # type: ignore[union-attr]
+        new_groups = [g for g in new_groups if g.items]
+        # only the feed buttons changed? then keep what we have. clicking DNS off used
+        # to wipe the whole view and start from zero, which is not what anyone wants
+        # from a toggle. snapshot() hides the switched off feeds instead
+        same_filter = new_groups == self._groups and join == self._join
+        self._groups = new_groups
         self._join = join
         self._feeds = None if feeds is None or feeds >= set(FEED_COLUMNS) else frozenset(feeds)
         self._compiled = parser.compile_groups(self._groups)
@@ -138,10 +143,13 @@ class View:
             log.warning("filter.and_join_incomplete",
                         kept=len(self._compiled), wanted=len(self._groups))
             self._compiled = []
-        self._buffer.clear()
-        self._matched = 0
-        self._dropped_slow = 0
-        # Drain the queue so no leftovers from the old filter slip through.
+        if not same_filter:
+            self._buffer.clear()
+            self._matched = 0
+            self._dropped_slow = 0
+        # Drain the queue so no leftovers from the old filter slip through. Safe for a
+        # feed-only change too, everything queued is already in the buffer and goes
+        # out with the snapshot that follows.
         while not self.queue.empty():
             try:
                 self.queue.get_nowait()
@@ -163,8 +171,14 @@ class View:
         except asyncio.QueueFull:
             self._dropped_slow += 1
 
+    def _visible(self) -> list[FlowRecord]:
+        records = self._buffer.snapshot()
+        if self._feeds is None:
+            return records
+        return [r for r in records if r.logtype in self._feeds]
+
     def snapshot(self) -> list[dict]:
-        return [r.as_dict() for r in self._buffer.snapshot()]
+        return [r.as_dict() for r in self._visible()]
 
     def stats(self) -> dict:
         return {
@@ -178,7 +192,7 @@ class View:
             ],
             "join": self._join.value,
             "feeds": sorted(self._feeds if self._feeds is not None else FEED_COLUMNS),
-            "buffered": len(self._buffer),
+            "buffered": len(self._buffer) if self._feeds is None else len(self._visible()),
             "matched": self._matched,
             "dropped_slow": self._dropped_slow,
         }

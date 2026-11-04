@@ -278,3 +278,34 @@ def test_setting_filters_again_without_feeds_restores_every_feed():
     assert v.stats()["feeds"] == ["dns", "fw", "web"]
     hub.handle_fields(_dns("10.0.0.1"))
     assert v.stats()["matched"] == 1
+
+
+def test_toggling_a_feed_keeps_the_buffer():
+    """Switching a feed off hides its records, it does not wipe the view."""
+    hub = Hub()
+    v = hub.register()
+    spec = [FilterSpec(field=FilterField.SRC_IP, value="10.0.0.1")]
+    v.set_filters(spec)
+    hub.handle_fields(_web("10.0.0.1", "u@x"))
+    hub.handle_fields(_dns("10.0.0.1"))
+
+    v.set_filters(spec, feeds=frozenset({"web", "fw"}))
+    assert [r["logtype"] for r in v.snapshot()] == ["web"]
+    assert v.stats()["buffered"] == 1
+    hub.handle_fields(_web("10.0.0.1", "u@x"))
+    hub.handle_fields(_dns("10.0.0.1"))  # off, never collected
+    assert [r["logtype"] for r in v.snapshot()] == ["web", "web"]
+
+    # back on: the DNS record from before is there again
+    v.set_filters(spec)
+    assert [r["logtype"] for r in v.snapshot()] == ["web", "dns", "web"]
+
+
+def test_changing_the_filter_itself_still_starts_over():
+    hub = Hub()
+    v = hub.register()
+    v.set_filters([FilterSpec(field=FilterField.SRC_IP, value="10.0.0.1")])
+    hub.handle_fields(_web("10.0.0.1", "u@x"))
+    v.set_filters([FilterSpec(field=FilterField.SRC_IP, value="10.0.0.2")])
+    assert v.snapshot() == []
+    assert v.stats()["matched"] == 0

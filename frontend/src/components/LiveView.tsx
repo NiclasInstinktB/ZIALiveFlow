@@ -722,9 +722,11 @@ export function LiveView({
         return;
       }
       if (msg.type === "snapshot" && msg.records) {
-        setRecords(msg.records.slice().reverse().slice(0, MAX_ROWS));
+        const next = msg.records.slice().reverse().slice(0, MAX_ROWS);
+        setRecords(next);
         if (msg.stats) setStats(msg.stats);
-        setExpanded(null);
+        // a feed toggle keeps the rows now, so keep the open one open too if it survived
+        setExpanded((cur) => (cur !== null && next.some((r) => r.id === cur) ? cur : null));
         // Fields the server threw out of the filter (someone lost the logs permission
         // mid-session, for instance). Every snapshot carries the current answer, so an
         // empty list clears the warning again.

@@ -3,6 +3,15 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.48.1
+
+Feed buttons no longer reset the live flow.
+
+- Switching Web, FW or DNS off hides those records instead of clearing the view. The other rows stay.
+- Switching a feed back on shows its earlier records again. Lines that came in while it was off are not collected.
+- An open detail row stays open if the record is still there.
+- Changing the actual filter still starts the view over, like before.
+
 ## v0.48.0
 
 Live flow filter takes IP ranges and lists.
