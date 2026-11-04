@@ -71,11 +71,14 @@ def test_lowering_the_ceiling_takes_effect_without_a_restart(limits):
 # ── Eviction by age ────────────────────────────────────────────────
 
 
-def test_the_age_boundary(limits):
+def test_the_age_boundary(limits, monkeypatch):
     """A record exactly at the cutoff is still inside the window and stays."""
     limits(retention_minutes=1)
     buf = RingBuffer()
     now = time.time()
+    # freeze the clock. the buffer reads time.time() again a few microseconds later and
+    # with the precise windows clock (3.13+) "exactly on the boundary" was already past it
+    monkeypatch.setattr(time, "time", lambda: now)
     buf.add(_rec(1, now - 61))     # outside
     buf.add(_rec(2, now - 60))     # exactly on the boundary
     buf.add(_rec(3, now - 59))     # inside

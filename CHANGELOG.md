@@ -3,6 +3,14 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.48.2
+
+Dependencies on current versions, runs on Python 3.15.
+
+- fastapi 0.162.0, uvicorn 0.54.0, websockets 17.4, pydantic 2.14.2, pydantic-settings 2.16.2, PyJWT 2.15.1, cryptography 50.0.2, tzdata 2026.6, pytest 9.2.0, pytest-asyncio 1.4.1.post1.
+- pydantic 2.13.4 had no wheel for Python 3.15, 2.14.2 has one.
+- Fixed a ring buffer test that failed on Python 3.13 and newer under Windows. The more precise clock put the record exactly on the age boundary just past it.
+
 ## v0.48.1
 
 Feed buttons no longer reset the live flow.
