@@ -3,6 +3,10 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.49.1
+
+- .gitignore covers .venv.new and .venv.old, the temporary folders deploy/venv.sh uses while it swaps the venv. A leftover one no longer marks the install as dirty in the update panel.
+
 ## v0.49.0
 
 Server installs move to the newest Python by themselves.
