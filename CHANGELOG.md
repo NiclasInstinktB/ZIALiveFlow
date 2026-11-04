@@ -3,6 +3,13 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.49.2
+
+Frontend packages on current versions, npm audit is clean again.
+
+- vite 8.3.5 fixes the two high severity advisories in vite and source-map-js.
+- react and react-dom 19.3.1, i18next 26.7.1, react-i18next 17.1.12, i18next-browser-languagedetector 8.3.0, @vitejs/plugin-react 6.2.1, @types/react and @types/react-dom 19.3.0.
+
 ## v0.49.1
 
 - .gitignore covers .venv.new and .venv.old, the temporary folders deploy/venv.sh uses while it swaps the venv. A leftover one no longer marks the install as dirty in the update panel.
