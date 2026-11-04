@@ -3,6 +3,11 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.49.3
+
+- deploy/venv.sh only warns when the newest Python on the host is below 3.11, the minimum the dependencies support. It used to warn on every update below 3.15, which most distributions do not ship yet.
+- README and DEPLOY.md ask for Python 3.11 or newer, the newest your distribution ships. Moving the venv to a newer Python stays automatic.
+
 ## v0.49.2
 
 Frontend packages on current versions, npm audit is clean again.

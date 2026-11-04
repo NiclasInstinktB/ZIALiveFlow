@@ -6,8 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."            # -> /opt/zscaler-admin-ui
 
-# anything older gets flagged by vulnerability scans, so warn loudly below this
-WANT_MINOR=15
+# below this the dependencies dont install anymore. anything newer gets picked up anyway
+MIN_MINOR=11
 
 minor() { "$1" -c 'import sys; print(sys.version_info[1] if sys.version_info[0] == 3 else -1)' 2>/dev/null; }
 
@@ -37,8 +37,8 @@ deps() { "$1/bin/python" -m pip install -q --upgrade pip && "$1/bin/python" -m p
 HAVE=-1
 if [ -x .venv/bin/python ]; then HAVE="$(minor .venv/bin/python || echo -1)"; fi
 
-if [ "$NEW" -lt "$WANT_MINOR" ] && [ "$HAVE" -lt "$WANT_MINOR" ]; then
-  echo "  WARN: newest Python on this host is 3.$NEW. Install Python 3.$WANT_MINOR, the next update moves the venv over by itself."
+if [ "$NEW" -lt "$MIN_MINOR" ] && [ "$HAVE" -lt "$MIN_MINOR" ]; then
+  echo "  WARN: newest Python on this host is 3.$NEW, the app needs at least 3.$MIN_MINOR. Install a newer one, the next update moves the venv over by itself."
 fi
 
 # same python, or the venv is somehow newer than what we found (never downgrade)

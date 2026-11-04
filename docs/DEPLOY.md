@@ -11,14 +11,14 @@ same way except for the package and firewall steps.
 
 ## Requirements
 
-Python 3.15, `node`, `npm`, `git`, `nginx`. The installer deliberately
+Python 3.11 or newer (the newest your distribution ships), `node`, `npm`, `git`, `nginx`. The installer deliberately
 does not install anything: it uses what is already on the system.
 
 `deploy/venv.sh` picks the newest `python3.x` on PATH (set `PYTHON=/path/to/python3.x`
 to force one). When a newer Python shows up later, the next update builds a fresh venv
 on it next to the old one and only swaps it in once every dependency installed, so a
-failed build leaves the running install alone. The update log warns while nothing newer
-than 3.14 is installed.
+failed build leaves the running install alone. The update log warns if nothing newer
+than 3.10 is installed.
 
 ## 1. Clone and install
 
