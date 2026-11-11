@@ -91,3 +91,35 @@ def test_unknown_message_type_is_ignored(client):
     result = _in_background(talk)
     assert not result["timed_out"] and "error" not in result, result
     assert [f["field"] for f in result["msg"]["stats"]["filters"]] == ["dst_ip"]
+
+
+def test_custom_filters_match_live_records(client):
+    from backend.ingest.hub import get_hub
+
+    def talk(out: dict) -> None:
+        with client.websocket_connect("/api/stream/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "set_filters", "groups": [{"op": "and", "items": [
+                {"field": "dst_port", "value": "443"},
+                {"field": "action", "value": "drop"},
+            ]}]})
+            out["filters"] = ws.receive_json()["stats"]["filters"]
+            from backend.config import FW_COLUMNS
+
+            row = [""] * len(FW_COLUMNS)
+            for key, value in {"type": "fw", "dst_port": "443", "action": "Allow"}.items():
+                row[FW_COLUMNS.index(key)] = value
+            get_hub().handle_fields(row)
+            row[FW_COLUMNS.index("action")] = "Drop"
+            get_hub().handle_fields(row)
+            while True:
+                message = ws.receive_json()
+                if message["type"] == "record":
+                    out["record"] = message["record"]
+                    return
+
+    result = _in_background(talk)
+    assert not result["timed_out"] and "error" not in result, result
+    assert [spec["field"] for spec in result["filters"]] == ["dst_port", "action"]
+    assert result["record"]["action"] == "Drop"
+    assert result["record"]["dst_port"] == 443

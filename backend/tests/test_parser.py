@@ -114,6 +114,29 @@ def test_no_filter_drops_everything():
     assert not parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b"), [])
 
 
+def test_custom_field_filters_use_feed_columns():
+    filters = _and(
+        _dst("198.51.100.4"),
+        FilterSpec(field=FilterField.DST_PORT, value="443"),
+        FilterSpec(field=FilterField.ACTION, value="drop"),
+    )
+    assert parser.wants(_fw("10.0.0.1", "198.51.100.4", "a@b", action="Drop"), filters)
+    assert not parser.wants(_fw("10.0.0.1", "198.51.100.4", "a@b"), filters)
+    assert not parser.wants(_web("10.0.0.1", "198.51.100.4", "a@b"), filters)
+
+
+def test_custom_text_filter_supports_case_insensitive_wildcards():
+    filters = _c(FilterSpec(field=FilterField.RULE, value="allow-*"))
+    assert parser.wants(_fw("10.0.0.1", "1.1.1.1", "a@b"), filters)
+    assert not parser.wants(_web("10.0.0.1", "1.1.1.1", "a@b"), filters)
+
+
+def test_missing_custom_column_does_not_match_wildcard():
+    filters = _c(FilterSpec(field=FilterField.DEVICE_NAME, value="*"))
+    assert not parser.wants(_fw("10.0.0.1", "1.1.1.1", "a@b"), filters)
+    assert not parser.wants(["web"], filters)
+
+
 def test_wildcard_src_ip():
     specs = _c(FilterSpec(field=FilterField.SRC_IP, value="10.20.30.*"))
     assert parser.wants(_web("10.20.30.40", "1.1.1.1", "a@b"), specs)
@@ -303,6 +326,27 @@ def test_dns_error_and_no_answer():
 def test_dns_prefilter_positions():
     assert parser.wants(_dns("10.0.0.1"), _c(_src("10.0.0.1")))
     assert parser.wants(_dns("10.0.0.1"), _c(_dst("192.0.2.53")))
+
+
+def test_custom_dns_filters_follow_normalized_decision():
+    groups = _and(
+        FilterSpec(field=FilterField.ACTION, value="block"),
+        FilterSpec(field=FilterField.RULE, value="req-rule"),
+        FilterSpec(field=FilterField.HOST, value="*.example.com"),
+        FilterSpec(field=FilterField.DST_PORT, value="53"),
+    )
+    assert parser.wants(_dns("10.0.0.1", req_action="Block"), groups)
+    assert not parser.wants(_dns("10.0.0.1", res_action="Block"), groups)
+    assert not parser.wants(_dns("10.0.0.1"), groups)
+
+
+def test_custom_firewall_target_and_server_ip():
+    groups = _and(
+        FilterSpec(field=FilterField.TARGET, value="github"),
+        FilterSpec(field=FilterField.SERVER_IP, value="198.51.100.0/24"),
+    )
+    assert parser.wants(_fw("10.0.0.1", "198.51.100.4", "a@b"), groups)
+    assert not parser.wants(_fw("10.0.0.1", "203.0.113.4", "a@b"), groups)
 
 
 def test_feed_restriction():

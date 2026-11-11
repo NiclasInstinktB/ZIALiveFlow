@@ -117,6 +117,16 @@ def test_other_fields_survive_obfuscation():
     assert denied == [] and len(_specs(groups)) == 2
 
 
+@pytest.mark.parametrize("field", REDACTED_FIELDS)
+def test_custom_personal_filters_denied_when_obfuscated(field):
+    groups, _join, denied = _parse_filters({"filters": [
+        {"field": field, "value": "guessed-person"},
+        {"field": "dst_port", "value": "443"},
+    ]}, obfuscated=True)
+    assert denied == [field]
+    assert [spec.field for spec in _specs(groups)] == [FilterField.DST_PORT]
+
+
 def test_user_filter_denied_inside_group():
     """The user filter is blocked in the group form too: a group that would be left with
     nothing but the user drops out entirely."""
