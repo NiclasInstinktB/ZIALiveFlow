@@ -30,7 +30,13 @@ export interface Me {
   user_domain_suffix: string;
 }
 
-export type FilterField = "src_ip" | "dst_ip" | "user" | "location";
+export type FilterField =
+  | "src_ip" | "dst_ip" | "user" | "location"
+  | "src_port" | "dst_port" | "server_ip" | "server_port" | "client_public_ip"
+  | "proto" | "action" | "host" | "target" | "rule" | "category" | "app_name"
+  | "dept" | "device_name" | "device_owner" | "http_status" | "reason"
+  | "dns_response" | "dns_error" | "dns_req_type" | "fwd_rule" | "ssl_policy"
+  | "url_policy" | "dest_country" | "tunnel_type";
 
 export interface FilterSpec {
   field: FilterField;

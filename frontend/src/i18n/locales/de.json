@@ -142,6 +142,12 @@
   },
   "live": {
     "field": {
+      "src_port": "Quellport",
+      "dst_port": "Zielport",
+      "server_port": "Server-Port",
+      "device_owner": "Gerätebesitzer",
+      "http_status": "HTTP-Status",
+      "reason": "Grund",
       "src_ip": "Source-IP",
       "dst_ip": "Ziel-IP",
       "user": "User (E-Mail)",
@@ -213,11 +219,14 @@
       "badRange": "ungültiger Bereich (z.B. 10.20.30.10-10.20.30.50)",
       "rangeTooLarge": "Bereich zu groß, höchstens 512 Adressen (wie /23)",
       "badIp": "keine gültige IP-Adresse",
+      "badPort": "Port von 1 bis 65535 oder ein Wildcard-Muster eingeben",
       "filterDenied": "Dieser Filter ist in der anonymisierten Ansicht nicht verfügbar und wurde nicht angewendet."
     },
     "opAnd": "UND",
     "opOr": "ODER",
     "ph": {
+      "port": "443",
+      "filterValue": "Wert",
       "userWithDomain": "vorname.nachname  →  {{domain}} wird ergänzt",
       "userPlain": "vorname.nachname@domain",
       "location": "exakt: Site-HQ->other  ·  Teil: Site-H*",
@@ -225,6 +234,7 @@
       "query": "🔍 Query:  Typ=Web*   status=404   regel!=Default   -github   (Feld=Wert, Wildcards, UND)"
     },
     "addFilter": "+ Filter",
+    "addFilterField": "Filterfeld hinzufügen",
     "targetGroupTitle": "In welche Gruppe soll der nächste Filter?",
     "targetAuto": "↳ automatisch",
     "targetNew": "↳ neue Gruppe",
@@ -391,7 +401,7 @@
     "columnsHint": "Reihenfolge (ziehen) und Sichtbarkeit der Tabellen-Spalten. Breite ziehst du direkt in der Tabelle.",
     "filterFields": "Filter-Felder",
     "filterFieldsHint": "Welche Felder im Live-Flow als Prefilter (Stream-Start) auswählbar sind.",
-    "obfHint": "Anonymisierte Ansicht: Der User-Filter ist gesperrt, suche über die Source-IP.",
+    "obfHint": "Anonymisierte Ansicht: Personenbezogene Filter sind gesperrt; suche über die Source-IP.",
     "chipLabel": "Bezeichnung",
     "chipLabelPh": "z.B. Blockiert · CN · 404",
     "queryLabel": "Query (Autovervollständigung: Feld tippen → Tab)",

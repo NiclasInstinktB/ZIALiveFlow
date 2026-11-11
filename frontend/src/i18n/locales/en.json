@@ -142,6 +142,12 @@
   },
   "live": {
     "field": {
+      "src_port": "Source port",
+      "dst_port": "Destination port",
+      "server_port": "Server port",
+      "device_owner": "Device owner",
+      "http_status": "HTTP status",
+      "reason": "Reason",
       "src_ip": "Source IP",
       "dst_ip": "Destination IP",
       "user": "User (email)",
@@ -213,11 +219,14 @@
       "badRange": "Invalid range (e.g. 10.20.30.10-10.20.30.50)",
       "rangeTooLarge": "Range too large, at most 512 addresses (like /23)",
       "badIp": "Not a valid IP address",
+      "badPort": "Enter a port from 1 to 65535 or a wildcard pattern",
       "filterDenied": "This filter is not available in the anonymised view and was not applied."
     },
     "opAnd": "AND",
     "opOr": "OR",
     "ph": {
+      "port": "443",
+      "filterValue": "Value",
       "userWithDomain": "first.last  →  {{domain}} is appended",
       "userPlain": "first.last@domain",
       "location": "exact: Site-HQ->other  ·  partial: Site-H*",
@@ -225,6 +234,7 @@
       "query": "🔍 Query:  type=Web*   status=404   rule!=Default   -github   (field=value, wildcards, AND)"
     },
     "addFilter": "+ Filter",
+    "addFilterField": "Add filter field",
     "targetGroupTitle": "Which group does the next filter go into?",
     "targetAuto": "↳ automatic",
     "targetNew": "↳ new group",
@@ -391,7 +401,7 @@
     "columnsHint": "Order (drag) and visibility of the table columns. Width is dragged in the table itself.",
     "filterFields": "Filter fields",
     "filterFieldsHint": "Which fields can be picked as a prefilter (stream start) in the live flow.",
-    "obfHint": "Anonymised view: the user filter is locked, search by source IP instead.",
+    "obfHint": "Anonymised view: personal filters are locked; search by source IP instead.",
     "chipLabel": "Label",
     "chipLabelPh": "e.g. Blocked · CN · 404",
     "queryLabel": "Query (autocomplete: type a field, then Tab)",

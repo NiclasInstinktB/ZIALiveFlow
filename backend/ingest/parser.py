@@ -19,6 +19,7 @@ from backend.ingest.models import (
     FilterSpec,
     FlowRecord,
     Verdict,
+    _CI_FIELDS,
 )
 from backend.ingest.timestamps import to_epoch
 from backend.logging_config import get_logger
@@ -32,7 +33,14 @@ CompiledFilter = tuple[str, object]
 # One precompiled group: (op, filters). ``op`` is "and" or "or".
 CompiledGroup = tuple[str, list[CompiledFilter]]
 
-_IP_FIELDS = {FilterField.SRC_IP.value, FilterField.DST_IP.value}
+_IP_FIELDS = {
+    FilterField.SRC_IP.value, FilterField.DST_IP.value,
+    FilterField.SERVER_IP.value, FilterField.CLIENT_PUBLIC_IP.value,
+}
+_COLUMN_POSITIONS = {
+    feed: {name: index for index, name in enumerate(columns)}
+    for feed, columns in FEED_COLUMNS.items()
+}
 _Network = (ipaddress.IPv4Network, ipaddress.IPv6Network)
 
 # Largest filter network allowed: /23 (= 512 IPv4 addresses). Wider networks such as /8
@@ -125,7 +133,7 @@ def compile_specs(specs: list[FilterSpec]) -> list[CompiledFilter]:
                 # Too many wildcards: discard (ReDoS protection) rather than risk the loop.
                 log.warning("filter.too_many_wildcards", field=field, value=value, stars=value.count("*"))
                 continue
-            flags = re.IGNORECASE if field in (FilterField.USER.value, FilterField.LOCATION.value) else 0
+            flags = re.IGNORECASE if s.field in _CI_FIELDS else 0
             out.append((field, re.compile(fnmatch.translate(value), flags)))
         else:
             out.append((field, value))
@@ -185,6 +193,10 @@ def _hit(field: str, matcher: object, src: str, dst: str, user: str, loc: str) -
         val = user
     else:  # location
         val = loc
+    return _value_hit(val, matcher)
+
+
+def _value_hit(val: str, matcher: object) -> bool:
     if isinstance(matcher, str):
         return val == matcher
     if isinstance(matcher, (*_Network, IPRange)):  # CIDR/range: membership
@@ -194,6 +206,32 @@ def _hit(field: str, matcher: object, src: str, dst: str, user: str, loc: str) -
             return False  # the field is not a valid IP → no match
     # compiled glob regex (fnmatch.translate anchors at the end)
     return bool(matcher.match(val))
+
+
+def _column_hit(field: str, matcher: object, fields: list[str]) -> bool:
+    feed = fields[0].strip().lower() if fields else ""
+    positions = _COLUMN_POSITIONS.get(feed, {})
+    key = "dns_query" if feed == "dns" and field in ("target", "host") else field
+    if feed == "fw" and field == "target":
+        key = "app_name"
+    if feed == "dns" and field in ("action", "rule"):
+        row = {
+            name: fields[index] for name, index in positions.items()
+            if name in {"dns_req_action", "dns_res_action", "dns_req_rule", "dns_res_rule"}
+            and index < len(fields)
+        }
+        action, rule = _dns_decision(row)
+        value = action if field == "action" else rule
+    else:
+        index = positions.get(key)
+        if index is None or index >= len(fields):
+            return False
+        value = fields[index]
+    if not value:
+        return False
+    if field in _CI_FIELDS:
+        value = value.lower()
+    return _value_hit(value, matcher)
 
 
 def wants(
@@ -225,12 +263,17 @@ def wants(
     dst = fields[COL_DST_IP] if n > COL_DST_IP else ""
     user = fields[COL_USER].lower() if n > COL_USER else ""
     loc = fields[COL_LOCATION].lower() if n > COL_LOCATION else ""
+    def matches(field: str, matcher: object) -> bool:
+        if field in ("src_ip", "dst_ip", "user", "location"):
+            return _hit(field, matcher, src, dst, user, loc)
+        return _column_hit(field, matcher, fields)
+
     join_or = join == "or"
     for op, compiled in groups:
         if op == "and":
-            group_hit = all(_hit(f, m, src, dst, user, loc) for f, m in compiled)
+            group_hit = all(matches(f, m) for f, m in compiled)
         else:
-            group_hit = any(_hit(f, m, src, dst, user, loc) for f, m in compiled)
+            group_hit = any(matches(f, m) for f, m in compiled)
         if join_or:
             if group_hit:
                 return True

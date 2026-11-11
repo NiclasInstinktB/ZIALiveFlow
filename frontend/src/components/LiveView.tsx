@@ -27,17 +27,76 @@ export const FIELD_LABEL_KEYS: Record<FilterField, string> = {
   dst_ip: "live.field.dst_ip",
   user: "live.field.user",
   location: "live.field.location",
+  src_port: "live.field.src_port",
+  dst_port: "live.field.dst_port",
+  server_ip: "live.col.server_ip",
+  server_port: "live.field.server_port",
+  client_public_ip: "live.col.client_public_ip",
+  proto: "live.col.proto",
+  action: "live.col.action",
+  host: "live.col.host",
+  target: "live.col.target",
+  rule: "live.col.rule",
+  category: "live.col.category",
+  app_name: "live.col.app",
+  dept: "live.col.dept",
+  device_name: "live.col.device",
+  device_owner: "live.field.device_owner",
+  http_status: "live.field.http_status",
+  reason: "live.field.reason",
+  dns_response: "live.col.dns_response",
+  dns_error: "live.col.dns_error",
+  dns_req_type: "live.col.dns_req_type",
+  fwd_rule: "live.col.fwd_rule",
+  ssl_policy: "live.col.ssl_policy",
+  url_policy: "live.col.url_policy",
+  dest_country: "live.col.country",
+  tunnel_type: "live.col.tunnel",
 };
-export const ALL_FILTER_FIELDS: FilterField[] = ["src_ip", "dst_ip", "user", "location"];
+export const DEFAULT_FILTER_FIELDS: FilterField[] = ["src_ip", "dst_ip", "user", "location"];
+export const ALL_FILTER_FIELDS = Object.keys(FIELD_LABEL_KEYS) as FilterField[];
+const IP_FILTER_FIELDS: FilterField[] = ["src_ip", "dst_ip", "server_ip", "client_public_ip"];
+const PORT_FILTER_FIELDS: FilterField[] = ["src_port", "dst_port", "server_port"];
 // In the anonymised view (permission "logs_obf") the user filter is locked: the
 // email is being masked, so filtering on it must not be possible either (otherwise
 // "are there hits?" would give the person away). Search runs over the source IP.
 // The backend enforces the same (api/stream_routes.py); this is only the matching UI.
-export const OBFUSCATED_DENIED_FIELDS: FilterField[] = ["user"];
+export const OBFUSCATED_DENIED_FIELDS: FilterField[] = ["user", "dept", "device_name", "device_owner"];
 export function allowedFilterFields(obfuscated: boolean): FilterField[] {
   return obfuscated
     ? ALL_FILTER_FIELDS.filter((f) => !OBFUSCATED_DENIED_FIELDS.includes(f))
     : ALL_FILTER_FIELDS;
+}
+
+export function FilterFieldPicker({ fields, onToggle, obfuscated }: {
+  fields: FilterField[];
+  onToggle: (field: FilterField) => void;
+  obfuscated: boolean;
+}) {
+  const { t } = useTranslation();
+  const allowed = allowedFilterFields(obfuscated);
+  const shown = allowed.filter((field) => DEFAULT_FILTER_FIELDS.includes(field) || fields.includes(field));
+  const available = allowed.filter((field) => !shown.includes(field));
+  return (
+    <div>
+      {shown.map((field) => (
+        <label key={field} className="check-row">
+          <input type="checkbox" checked={fields.includes(field)} onChange={() => onToggle(field)} />
+          {t(FIELD_LABEL_KEYS[field])}
+        </label>
+      ))}
+      {available.length > 0 && (
+        <select
+          aria-label={t("live.addFilterField")}
+          value=""
+          onChange={(event) => { if (event.target.value) onToggle(event.target.value as FilterField); }}
+        >
+          <option value="" disabled>{t("live.addFilterField")}</option>
+          {available.map((field) => <option key={field} value={field}>{t(FIELD_LABEL_KEYS[field])}</option>)}
+        </select>
+      )}
+    </div>
+  );
 }
 
 // Only for the table column "Verdict" (verdict code → translated label).
@@ -382,7 +441,7 @@ function validateRange(v: string): FilterError | null {
 }
 /** Several values separated by comma/semicolon: IP fields turn them into separate filters. */
 function splitFilterValues(field: FilterField, value: string): string[] {
-  if (field !== "src_ip" && field !== "dst_ip") return [value.trim()];
+  if (!IP_FILTER_FIELDS.includes(field)) return [value.trim()];
   return value.split(/[,;]/).map((p) => p.trim()).filter(Boolean);
 }
 function validateFilter(field: FilterField, value: string): FilterError | null {
@@ -405,6 +464,11 @@ function validateFilterValue(field: FilterField, value: string): FilterError | n
     if (/\s/.test(v)) return { key: "live.err.userSpaces" };
     return null;
   }
+  if (PORT_FILTER_FIELDS.includes(field)) {
+    if (hasWildcard && /^[0-9*?]+$/.test(v)) return null;
+    return /^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 65535 ? null : { key: "live.err.badPort" };
+  }
+  if (!IP_FILTER_FIELDS.includes(field)) return null;
   // src_ip / dst_ip
   if (v.includes("/")) {
     if (!isValidCIDR(v)) return { key: "live.err.badCidr" };
@@ -496,7 +560,7 @@ export function LiveView({
   const [layout, setLayout] = useState<LayoutItem[]>(defaultLayout);
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const [limit, setLimit] = useState(100);
-  const [filterFields, setFilterFields] = useState<FilterField[]>(ALL_FILTER_FIELDS);
+  const [filterFields, setFilterFields] = useState<FilterField[]>(DEFAULT_FILTER_FIELDS);
   const [presets, setPresets] = useState<FilterPreset[]>([]);
   // Which feeds this view receives. Applied server side, on the same path as the filters.
   const [feeds, setFeeds] = useState<FeedType[]>(ALL_FEEDS);
@@ -969,7 +1033,7 @@ export function LiveView({
   }
   function resetLayout() {
     setLayout(defaultLayout());
-    setFilterFields(ALL_FILTER_FIELDS);
+    setFilterFields(DEFAULT_FILTER_FIELDS);
     setChipView(mergeChipView(null, [...globalChips, ...personalChips]));
     setActiveChips(new Set());
   }
@@ -1131,7 +1195,11 @@ export function LiveView({
                     : t("live.ph.userPlain")
                   : draftField === "location"
                     ? t("live.ph.location")
-                    : t("live.ph.ip")
+                    : IP_FILTER_FIELDS.includes(draftField)
+                      ? t("live.ph.ip")
+                      : PORT_FILTER_FIELDS.includes(draftField)
+                        ? t("live.ph.port")
+                        : t("live.ph.filterValue")
               }
               value={draftValue}
               onChange={(e) => setDraftValue(e.target.value)}
@@ -1318,12 +1386,7 @@ export function LiveView({
 
                 <div className="settings-section">
                   <span className="settings-label">{t("live.filterFields")}</span>
-                  {selectableFields.map((f) => (
-                    <label key={f} className="check-row">
-                      <input type="checkbox" checked={filterFields.includes(f)} onChange={() => toggleFilterField(f)} />
-                      {t(FIELD_LABEL_KEYS[f])}
-                    </label>
-                  ))}
+                  <FilterFieldPicker fields={filterFields} onToggle={toggleFilterField} obfuscated={obfuscated} />
                 </div>
 
                 <div className="settings-section">
