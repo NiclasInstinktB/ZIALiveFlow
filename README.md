@@ -197,6 +197,10 @@ The **first five fields are identical in all three feeds** and form a positional
 `0` type (web, fw or dns), `1` source IP, `2` destination IP, `3` user, `4` location. They sit at
 the front so the receiver can discard a line without parsing the rest of it.
 
+Additional stream filters use the configured feed-specific column positions too, without
+building a full record first. Fields missing from a feed do not match. DNS action/rule
+filters use the same request/response decision as the displayed record.
+
 Two things worth checking against the field picker in your console:
 
 - If a token is named differently in your tenant, or is unavailable, **keep its position**
@@ -223,6 +227,10 @@ appearing. The firewall and DNS feeds send epoch milliseconds and are unaffected
 2. Build a filter in the **Live-Flow** tab (source IP, destination IP, user, location, with
    `*` and `?` wildcards) and add it. It takes effect immediately and applies only to your
    own session. Without an active filter, everything is discarded on purpose.
+
+   More fields (port, action, host, rule, app, protocol and so on) can be added under
+   **View → Filter fields → Add filter field**. A field a feed does not have never matches.
+   In anonymised sessions the personal fields are locked.
 
    Filters sit in **groups**. Within a group the group operator applies, between groups the
    operator shown between them, and you toggle both by clicking them. By default, several

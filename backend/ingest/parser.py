@@ -19,6 +19,7 @@ from backend.ingest.models import (
     FilterSpec,
     FlowRecord,
     Verdict,
+    _CI_FIELDS,
 )
 from backend.ingest.timestamps import to_epoch
 from backend.logging_config import get_logger
@@ -32,7 +33,15 @@ CompiledFilter = tuple[str, object]
 # One precompiled group: (op, filters). ``op`` is "and" or "or".
 CompiledGroup = tuple[str, list[CompiledFilter]]
 
-_IP_FIELDS = {FilterField.SRC_IP.value, FilterField.DST_IP.value}
+_IP_FIELDS = {
+    FilterField.SRC_IP.value, FilterField.DST_IP.value,
+    FilterField.SERVER_IP.value, FilterField.CLIENT_PUBLIC_IP.value,
+}
+_PREFILTER_FIELDS = frozenset({"src_ip", "dst_ip", "user", "location"})
+_COLUMN_POSITIONS = {
+    feed: {name: index for index, name in enumerate(columns)}
+    for feed, columns in FEED_COLUMNS.items()
+}
 _Network = (ipaddress.IPv4Network, ipaddress.IPv6Network)
 
 # Largest filter network allowed: /23 (= 512 IPv4 addresses). Wider networks such as /8
@@ -125,7 +134,7 @@ def compile_specs(specs: list[FilterSpec]) -> list[CompiledFilter]:
                 # Too many wildcards: discard (ReDoS protection) rather than risk the loop.
                 log.warning("filter.too_many_wildcards", field=field, value=value, stars=value.count("*"))
                 continue
-            flags = re.IGNORECASE if field in (FilterField.USER.value, FilterField.LOCATION.value) else 0
+            flags = re.IGNORECASE if s.field in _CI_FIELDS else 0
             out.append((field, re.compile(fnmatch.translate(value), flags)))
         else:
             out.append((field, value))
@@ -185,6 +194,10 @@ def _hit(field: str, matcher: object, src: str, dst: str, user: str, loc: str) -
         val = user
     else:  # location
         val = loc
+    return _value_hit(val, matcher)
+
+
+def _value_hit(val: str, matcher: object) -> bool:
     if isinstance(matcher, str):
         return val == matcher
     if isinstance(matcher, (*_Network, IPRange)):  # CIDR/range: membership
@@ -194,6 +207,42 @@ def _hit(field: str, matcher: object, src: str, dst: str, user: str, loc: str) -
             return False  # the field is not a valid IP → no match
     # compiled glob regex (fnmatch.translate anchors at the end)
     return bool(matcher.match(val))
+
+
+# Filter field -> column name, where a feed stores it under another name. Has to match
+# what parse_line() puts into the record, otherwise the filter and the table disagree.
+_FIELD_ALIASES = {
+    "fw": {"target": "app_name"},
+    "dns": {"target": "dns_query", "host": "dns_query", "reason": "dns_error"},
+}
+_DNS_DECISION_COLS = ("dns_req_action", "dns_res_action", "dns_req_rule", "dns_res_rule")
+
+
+def _col(fields: list[str], positions: dict[str, int], name: str) -> str:
+    i = positions.get(name)
+    return fields[i] if i is not None and i < len(fields) else ""
+
+
+def _column_hit(field: str, matcher: object, fields: list[str]) -> bool:
+    """Filter on any other column. Slower than the prefilter four, only runs when someone
+    actually picked such a field."""
+    feed = fields[0].strip().lower() if fields else ""
+    positions = _COLUMN_POSITIONS.get(feed)
+    if positions is None:
+        return False
+    if feed == "dns" and field in ("action", "rule"):
+        # dns has two decisions, use the same pick as the record or it gets confusing
+        action, rule = _dns_decision({c: _col(fields, positions, c) for c in _DNS_DECISION_COLS})
+        value = action if field == "action" else rule
+    else:
+        value = _col(fields, positions, _FIELD_ALIASES.get(feed, {}).get(field, field))
+        if feed == "dns" and field == "reason" and value.strip().lower() in _DNS_NO_ERROR:
+            value = ""  # NOERROR isnt a reason, the record leaves it empty too
+    if not value:
+        return False
+    if field in _CI_FIELDS:
+        value = value.lower()
+    return _value_hit(value, matcher)
 
 
 def wants(
@@ -227,10 +276,12 @@ def wants(
     loc = fields[COL_LOCATION].lower() if n > COL_LOCATION else ""
     join_or = join == "or"
     for op, compiled in groups:
-        if op == "and":
-            group_hit = all(_hit(f, m, src, dst, user, loc) for f, m in compiled)
-        else:
-            group_hit = any(_hit(f, m, src, dst, user, loc) for f, m in compiled)
+        # no closure per line here, this runs for every line x every view
+        hits = (
+            _hit(f, m, src, dst, user, loc) if f in _PREFILTER_FIELDS else _column_hit(f, m, fields)
+            for f, m in compiled
+        )
+        group_hit = all(hits) if op == "and" else any(hits)
         if join_or:
             if group_hit:
                 return True

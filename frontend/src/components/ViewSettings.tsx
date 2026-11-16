@@ -5,10 +5,10 @@ import type { ChipColor, FilterField, FlowRecord, QueryChip } from "../types";
 import { matchRecord, parseQuery, suggest, type Suggestion } from "../query";
 import {
   ALL_FILTER_FIELDS,
+  DEFAULT_FILTER_FIELDS,
+  FilterFieldPicker,
   CHIP_COLORS,
   COLUMN_META,
-  FIELD_LABEL_KEYS,
-  allowedFilterFields,
   chipHex,
   defaultLayout,
   genChipId,
@@ -134,9 +134,8 @@ interface Editing {
 // arrive masked.
 export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
   const { t } = useTranslation();
-  const selectableFields = useMemo(() => allowedFilterFields(obfuscated), [obfuscated]);
   const [layout, setLayout] = useState<LayoutItem[]>(defaultLayout);
-  const [filterFields, setFilterFields] = useState<FilterField[]>(ALL_FILTER_FIELDS);
+  const [filterFields, setFilterFields] = useState<FilterField[]>(DEFAULT_FILTER_FIELDS);
   const [personalChips, setPersonalChips] = useState<QueryChip[]>([]);
   const [globalChips, setGlobalChips] = useState<QueryChip[]>([]);
   const [chipView, setChipView] = useState<ChipViewItem[]>([]);
@@ -319,7 +318,7 @@ export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
   }
   function resetAll() {
     setLayout(defaultLayout());
-    setFilterFields(ALL_FILTER_FIELDS);
+    setFilterFields(DEFAULT_FILTER_FIELDS);
     setChipView(mergeChipView(null, [...globalChips, ...personalChips]));
   }
 
@@ -456,12 +455,7 @@ export function ViewSettings({ obfuscated = false }: { obfuscated?: boolean }) {
           <h2>{t("view.filterFields")}</h2>
           <p className="muted vs-hint">{t("view.filterFieldsHint")}</p>
           {obfuscated && <p className="muted vs-hint">{t("view.obfHint")}</p>}
-          {selectableFields.map((f) => (
-            <label key={f} className="check-row">
-              <input type="checkbox" checked={filterFields.includes(f)} onChange={() => toggleFilterField(f)} />
-              {t(FIELD_LABEL_KEYS[f])}
-            </label>
-          ))}
+          <FilterFieldPicker fields={filterFields} onToggle={toggleFilterField} obfuscated={obfuscated} />
         </section>
       </div>
     </div>

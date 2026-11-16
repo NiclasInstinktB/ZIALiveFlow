@@ -147,10 +147,39 @@ class FilterField(str, Enum):
     DST_IP = "dst_ip"
     USER = "user"
     LOCATION = "location"
+    SRC_PORT = "src_port"
+    DST_PORT = "dst_port"
+    SERVER_IP = "server_ip"
+    SERVER_PORT = "server_port"
+    CLIENT_PUBLIC_IP = "client_public_ip"
+    PROTO = "proto"
+    ACTION = "action"
+    HOST = "host"
+    TARGET = "target"
+    RULE = "rule"
+    CATEGORY = "category"
+    APP_NAME = "app_name"
+    DEPT = "dept"
+    DEVICE_NAME = "device_name"
+    DEVICE_OWNER = "device_owner"
+    HTTP_STATUS = "http_status"
+    REASON = "reason"
+    DNS_RESPONSE = "dns_response"
+    DNS_ERROR = "dns_error"
+    DNS_REQ_TYPE = "dns_req_type"
+    FWD_RULE = "fwd_rule"
+    SSL_POLICY = "ssl_policy"
+    URL_POLICY = "url_policy"
+    DEST_COUNTRY = "dest_country"
+    TUNNEL_TYPE = "tunnel_type"
 
 
-# Filter fields that are compared case insensitively (user/location).
-_CI_FIELDS = {FilterField.USER, FilterField.LOCATION}
+# Text filters are case insensitive; addresses and numeric fields remain exact.
+_CI_FIELDS = set(FilterField) - {
+    FilterField.SRC_IP, FilterField.DST_IP, FilterField.SERVER_IP,
+    FilterField.CLIENT_PUBLIC_IP, FilterField.SRC_PORT, FilterField.DST_PORT,
+    FilterField.SERVER_PORT, FilterField.HTTP_STATUS,
+}
 
 
 class FilterSpec(BaseModel):
@@ -158,7 +187,7 @@ class FilterSpec(BaseModel):
     value: str
 
     def normalized(self) -> "FilterSpec":
-        # User/location case insensitive, IPs untouched (exact string comparison).
+        # Text is case insensitive, IPs and numeric values stay unchanged.
         val = self.value.strip()
         if self.field in _CI_FIELDS:
             val = val.lower()

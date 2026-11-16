@@ -40,7 +40,7 @@ from backend.auth.models import PERM_LOGS, PERM_LOGS_OBF, Principal
 from backend.config import FEED_COLUMNS, settings
 from backend.ingest.hub import get_hub
 from backend.ingest.models import FilterField, FilterGroup, FilterOp, FilterSpec
-from backend.ingest.redact import redact, redact_all
+from backend.ingest.redact import REDACTED_FIELDS, redact, redact_all
 from backend.logging_config import get_logger
 
 router = APIRouter(prefix="/api/stream", tags=["stream"])
@@ -98,7 +98,7 @@ _STATS_INTERVAL_S = 2.5
 # Filter fields denied to an anonymized session. Without this block the masking would be
 # worthless: you could filter on a guessed address and infer the person from whether any
 # matches come back, using the stream as an oracle.
-_OBF_DENIED_FIELDS = frozenset({FilterField.USER})
+_OBF_DENIED_FIELDS = frozenset(FilterField(field) for field in REDACTED_FIELDS)
 
 _OP_LABEL = {FilterOp.AND: "AND", FilterOp.OR: "OR"}
 
