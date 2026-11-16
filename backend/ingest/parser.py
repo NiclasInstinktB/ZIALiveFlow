@@ -37,6 +37,7 @@ _IP_FIELDS = {
     FilterField.SRC_IP.value, FilterField.DST_IP.value,
     FilterField.SERVER_IP.value, FilterField.CLIENT_PUBLIC_IP.value,
 }
+_PREFILTER_FIELDS = frozenset({"src_ip", "dst_ip", "user", "location"})
 _COLUMN_POSITIONS = {
     feed: {name: index for index, name in enumerate(columns)}
     for feed, columns in FEED_COLUMNS.items()
@@ -208,25 +209,35 @@ def _value_hit(val: str, matcher: object) -> bool:
     return bool(matcher.match(val))
 
 
+# Filter field -> column name, where a feed stores it under another name. Has to match
+# what parse_line() puts into the record, otherwise the filter and the table disagree.
+_FIELD_ALIASES = {
+    "fw": {"target": "app_name"},
+    "dns": {"target": "dns_query", "host": "dns_query", "reason": "dns_error"},
+}
+_DNS_DECISION_COLS = ("dns_req_action", "dns_res_action", "dns_req_rule", "dns_res_rule")
+
+
+def _col(fields: list[str], positions: dict[str, int], name: str) -> str:
+    i = positions.get(name)
+    return fields[i] if i is not None and i < len(fields) else ""
+
+
 def _column_hit(field: str, matcher: object, fields: list[str]) -> bool:
+    """Filter on any other column. Slower than the prefilter four, only runs when someone
+    actually picked such a field."""
     feed = fields[0].strip().lower() if fields else ""
-    positions = _COLUMN_POSITIONS.get(feed, {})
-    key = "dns_query" if feed == "dns" and field in ("target", "host") else field
-    if feed == "fw" and field == "target":
-        key = "app_name"
+    positions = _COLUMN_POSITIONS.get(feed)
+    if positions is None:
+        return False
     if feed == "dns" and field in ("action", "rule"):
-        row = {
-            name: fields[index] for name, index in positions.items()
-            if name in {"dns_req_action", "dns_res_action", "dns_req_rule", "dns_res_rule"}
-            and index < len(fields)
-        }
-        action, rule = _dns_decision(row)
+        # dns has two decisions, use the same pick as the record or it gets confusing
+        action, rule = _dns_decision({c: _col(fields, positions, c) for c in _DNS_DECISION_COLS})
         value = action if field == "action" else rule
     else:
-        index = positions.get(key)
-        if index is None or index >= len(fields):
-            return False
-        value = fields[index]
+        value = _col(fields, positions, _FIELD_ALIASES.get(feed, {}).get(field, field))
+        if feed == "dns" and field == "reason" and value.strip().lower() in _DNS_NO_ERROR:
+            value = ""  # NOERROR isnt a reason, the record leaves it empty too
     if not value:
         return False
     if field in _CI_FIELDS:
@@ -263,17 +274,14 @@ def wants(
     dst = fields[COL_DST_IP] if n > COL_DST_IP else ""
     user = fields[COL_USER].lower() if n > COL_USER else ""
     loc = fields[COL_LOCATION].lower() if n > COL_LOCATION else ""
-    def matches(field: str, matcher: object) -> bool:
-        if field in ("src_ip", "dst_ip", "user", "location"):
-            return _hit(field, matcher, src, dst, user, loc)
-        return _column_hit(field, matcher, fields)
-
     join_or = join == "or"
     for op, compiled in groups:
-        if op == "and":
-            group_hit = all(matches(f, m) for f, m in compiled)
-        else:
-            group_hit = any(matches(f, m) for f, m in compiled)
+        # no closure per line here, this runs for every line x every view
+        hits = (
+            _hit(f, m, src, dst, user, loc) if f in _PREFILTER_FIELDS else _column_hit(f, m, fields)
+            for f, m in compiled
+        )
+        group_hit = all(hits) if op == "and" else any(hits)
         if join_or:
             if group_hit:
                 return True

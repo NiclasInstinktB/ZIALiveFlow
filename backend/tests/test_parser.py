@@ -340,6 +340,18 @@ def test_custom_dns_filters_follow_normalized_decision():
     assert not parser.wants(_dns("10.0.0.1"), groups)
 
 
+def test_custom_dns_reason_uses_error_column():
+    from backend.config import DNS_COLUMNS
+
+    row = [""] * len(DNS_COLUMNS)
+    row[0] = "dns"
+    groups = _c(FilterSpec(field=FilterField.REASON, value="nxdomain"))
+    row[DNS_COLUMNS.index("dns_error")] = "NXDOMAIN"
+    assert parser.wants(row, groups)
+    row[DNS_COLUMNS.index("dns_error")] = "NOERROR"
+    assert not parser.wants(row, _c(FilterSpec(field=FilterField.REASON, value="*")))
+
+
 def test_custom_firewall_target_and_server_ip():
     groups = _and(
         FilterSpec(field=FilterField.TARGET, value="github"),

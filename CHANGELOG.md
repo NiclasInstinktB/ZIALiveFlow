@@ -3,6 +3,13 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.50.0
+
+More live filter fields, thanks to CyberPaschk (#1).
+
+- Ports, action, host, rule, app, protocol and a bunch more can be added as filter fields under View → Filter fields.
+- Anonymised sessions lock every masked field as a filter, not just the user.
+
 ## v0.49.3
 
 - deploy/venv.sh only warns when the newest Python on the host is below 3.11, the minimum the dependencies support. It used to warn on every update below 3.15, which most distributions do not ship yet.

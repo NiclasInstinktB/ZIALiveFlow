@@ -228,14 +228,9 @@ appearing. The firewall and DNS feeds send epoch milliseconds and are unaffected
    `*` and `?` wildcards) and add it. It takes effect immediately and applies only to your
    own session. Without an active filter, everything is discarded on purpose.
 
-  In **View → Filter fields → Add filter field**, add fields such as destination port,
-  action, host, rule, application or protocol to the live filter picker. The same selector
-  is available in the live view's **View** menu. Selections are saved per account; existing
-  accounts keep their current four-field defaults until they add more. Text uses
-  case-insensitive exact matching, or `*`/`?` patterns. Ports use exact values or digit
-  patterns; IP fields also support the existing CIDR/range syntax. Personal fields
-  (user, department, device name and owner) cannot be filtered in anonymised sessions;
-  this is enforced on the server as well as in the picker.
+   More fields (port, action, host, rule, app, protocol and so on) can be added under
+   **View → Filter fields → Add filter field**. A field a feed does not have never matches.
+   In anonymised sessions the personal fields are locked.
 
    Filters sit in **groups**. Within a group the group operator applies, between groups the
    operator shown between them, and you toggle both by clicking them. By default, several

@@ -57,10 +57,11 @@ export const DEFAULT_FILTER_FIELDS: FilterField[] = ["src_ip", "dst_ip", "user",
 export const ALL_FILTER_FIELDS = Object.keys(FIELD_LABEL_KEYS) as FilterField[];
 const IP_FILTER_FIELDS: FilterField[] = ["src_ip", "dst_ip", "server_ip", "client_public_ip"];
 const PORT_FILTER_FIELDS: FilterField[] = ["src_port", "dst_port", "server_port"];
-// In the anonymised view (permission "logs_obf") the user filter is locked: the
-// email is being masked, so filtering on it must not be possible either (otherwise
+// In the anonymised view (permission "logs_obf") the personal filters are locked: those
+// fields get masked, so filtering on them must not be possible either (otherwise
 // "are there hits?" would give the person away). Search runs over the source IP.
-// The backend enforces the same (api/stream_routes.py); this is only the matching UI.
+// keep in sync with REDACTED_FIELDS in backend/ingest/redact.py, the backend enforces it,
+// this is only the matching UI.
 export const OBFUSCATED_DENIED_FIELDS: FilterField[] = ["user", "dept", "device_name", "device_owner"];
 export function allowedFilterFields(obfuscated: boolean): FilterField[] {
   return obfuscated
