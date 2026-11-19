@@ -98,7 +98,9 @@ def main() -> None:
     py = str(venv_python())
     print("\n== backend dependencies ==")
     run([py, "-m", "pip", "install", "--upgrade", "pip", "--quiet"])
-    run([py, "-m", "pip", "install", "-r", str(ROOT / "backend" / "requirements.txt"), "--quiet"])
+    # eager, otherwise an old venv keeps whatever transitive deps it had (anyio & co)
+    run([py, "-m", "pip", "install", "--upgrade", "--upgrade-strategy", "eager",
+         "-r", str(ROOT / "backend" / "requirements.txt"), "--quiet"])
 
     print("\n== frontend ==")
     run([npm, "install"], cwd=ROOT / "frontend")

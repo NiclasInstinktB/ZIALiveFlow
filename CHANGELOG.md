@@ -3,6 +3,10 @@
 Newest version first. Versions are tagged `vX.Y.Z`, the middle number goes up for
 features, the last one for fixes in between.
 
+## v0.50.1
+
+- deploy/venv.sh and install.py install the requirements with `--upgrade --upgrade-strategy eager`. A reused venv used to keep old transitive dependencies (anyio, h11, idna, certifi and so on) as long as they still satisfied the pins, so security scans kept flagging them. They now move to the newest version that fits on every update.
+
 ## v0.50.0
 
 More live filter fields, thanks to CyberPaschk (#1).

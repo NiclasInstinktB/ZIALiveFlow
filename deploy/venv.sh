@@ -32,7 +32,12 @@ echo "  Python: $PY ($("$PY" --version 2>&1))"
 # servers have no compiler. pure python is fine, nothing here parses yaml on a hot path
 export PYYAML_FORCE_LIBYAML=0
 
-deps() { "$1/bin/python" -m pip install -q --upgrade pip && "$1/bin/python" -m pip install -q -r backend/requirements.txt; }
+deps() {
+  "$1/bin/python" -m pip install -q --upgrade pip &&
+  # plain -r leaves a reused venv alone as long as the pins are satisfied, so stuff like
+  # anyio, starlette, h11, certifi just rots there forever. eager pulls the transitive ones up too
+  "$1/bin/python" -m pip install -q --upgrade --upgrade-strategy eager -r backend/requirements.txt
+}
 
 HAVE=-1
 if [ -x .venv/bin/python ]; then HAVE="$(minor .venv/bin/python || echo -1)"; fi
